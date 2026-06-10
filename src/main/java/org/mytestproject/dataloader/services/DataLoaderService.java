@@ -48,9 +48,7 @@ public class DataLoaderService {
                 totalProcessedLines++;
                 if (line.isBlank()) continue;
 
-                validateAndParse(line, log).ifPresent(emp -> {
-                    batch.add(new Employee(emp.name(), emp.role(), emp.salary()));
-                });
+                validateAndParse(line, log).ifPresent(batch::add);
 
                 // Trigger chunk processing
                 if (batch.size() >= batchSize) {
@@ -93,7 +91,7 @@ public class DataLoaderService {
     /**
      * Helper method to validate every column and handle parsing errors safely.
      */
-    private Optional<EmployeeForLoadTest> validateAndParse(String line, Logger logger) {
+    private Optional<Employee> validateAndParse(String line, Logger logger) {
         try {
             String[] row = line.split(",");
 
@@ -144,7 +142,7 @@ public class DataLoaderService {
             }
 
             // Everything is valid! Return the record object packed inside an Optional
-            return Optional.of(new EmployeeForLoadTest(id, name, role, salary));
+            return Optional.of(new Employee(name, role, salary));
 
         } catch (Exception e) {
             logger.error("Skipping line: Unexpected parsing error: {}. Line: [{}]", e.getMessage(), line);
