@@ -2,7 +2,6 @@ package org.mytestproject.dataloader.services;
 
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
-import org.mytestproject.dataloader.models.EmployeeForLoadTest;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
 import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Value;
