@@ -4,30 +4,25 @@ import org.mytestproject.dataloader.entities.Employee;
 import org.mytestproject.dataloader.listeners.EmployeeSkipListener;
 import org.mytestproject.dataloader.listeners.JobPerformanceListener;
 import org.mytestproject.dataloader.models.EmployeeDto;
-import org.mytestproject.dataloader.models.SkippedRecordAudit;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
 import org.springframework.batch.core.job.Job;
-import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.batch.infrastructure.item.file.FlatFileItemReader;
-import org.springframework.batch.infrastructure.item.file.FlatFileItemWriter;
 import org.springframework.batch.infrastructure.item.file.builder.FlatFileItemReaderBuilder;
-import org.springframework.batch.infrastructure.item.file.builder.FlatFileItemWriterBuilder;
 import org.springframework.batch.infrastructure.item.support.CompositeItemProcessor;
 import org.springframework.batch.infrastructure.item.validator.BeanValidatingItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.jdbc.datasource.init.DataSourceInitializer;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.transaction.PlatformTransactionManager;
-
 import javax.sql.DataSource;
 import java.util.List;
 
@@ -39,7 +34,7 @@ public class SpringBatchConfig {
 
     private final EmployeeRepository employeeRepository;
 
-    private final EmployeeSkipListener employeeSkipListener; // Inject the listenerj
+    private final EmployeeSkipListener employeeSkipListener; // Inject the listener
 
     private final JobPerformanceListener jobPerformanceListener;
 

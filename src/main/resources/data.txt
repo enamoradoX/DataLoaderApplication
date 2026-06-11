@@ -6,3 +6,4 @@ id|name|role|salary
 5|Ethan|HR Specialist|65000
 6|Joe|PodCaster|20000000
 7|Mia|Film Actress|tr000000*
+8|Stanley|Film Actor|7888
