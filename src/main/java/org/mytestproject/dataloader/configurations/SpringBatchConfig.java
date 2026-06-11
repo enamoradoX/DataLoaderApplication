@@ -74,7 +74,7 @@ public class SpringBatchConfig {
     // 2. The Clean Mapping Bean (Only runs if validation passes)
     @Bean
     public ItemProcessor<EmployeeDto, Employee> entityMapper() {
-        return emp -> new Employee(emp.name(), emp.role(), emp.salary());
+        return emp -> new Employee(emp.name(), emp.role(), emp.salary(), emp.email());
     }
 
     // 3. The Composite Pipeline Bean (Combines Validation + Mapping)
@@ -94,13 +94,14 @@ public class SpringBatchConfig {
                 .name("employeeReader")
                 .resource(dataFile)
                 .linesToSkip(1) // Skip header row
-                .delimited().delimiter("|")
-                .names("id", "name", "role", "salary")
+                .delimited()
+                .names("id","employeeName","email","role","salary")
                 .fieldSetMapper(fieldSet -> new EmployeeDto(
                         fieldSet.readInt("id"),
-                        fieldSet.readString("name"),
+                        fieldSet.readString("employeeName"),
                         fieldSet.readString("role"),
-                        fieldSet.readLong("salary")
+                        fieldSet.readLong("salary"),
+                        fieldSet.readString("email")
                 ))
                 .build();
     }

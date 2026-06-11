@@ -1,9 +1,14 @@
-id|name|role|salary
-1|Alice|Developer|95000
-2|Bob|Manager|tr000000*
-3|Charlie|Designer|82000
-4|Diana|Developer|105000
-5|Ethan|HR Specialist|65000
-6|Joe|PodCaster|20000000
-7|Mia|Film Actress|tr000000*
-8|Stanley|Film Actor|7888
+id,employeeName,email,role,salary
+2001,José Javier Óñiz,jose.oniz@domain.es,Senior Architect,145000
+2002,Chun Li (李春),chun.li@asia.cn,Staff Engineer,160000
+2003,John Doe,   j.doe@space.com   ,   Data Scientist   ,115000
+2004,Jane-Sébastien M'G调,jane.mg@corp.ca,VP of Engineering,250000
+2005,Negative ID Test,neg.id@test.com,Developer,-12000
+2006,Rich Employee,rich@test.com,CEO,2147483647
+2007,Overflow Employee,overflow@test.com,Founder,9999999999999999
+2008,Missing At Sign,no-at-domain.com,Analyst,60000
+2009,Multiple @@ Signs,user@@domain.com,Analyst,65000
+2010,Name with Numbers 123,num.name@test.com,Developer,80000
+2011,Admin '; DROP TABLE EMPLOYEE; --,sql@inject.com,Security,90000
+,Missing ID Record,no.id@test.com,Intern,30000
+2012,Valid End Record,final.valid@test.com,Database Developer,105000

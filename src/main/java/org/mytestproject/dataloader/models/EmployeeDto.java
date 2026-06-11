@@ -1,16 +1,13 @@
 package org.mytestproject.dataloader.models;
 
-import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 
 public record EmployeeDto(
     @NotNull(message = "ID cannot be null")
     Integer id,
 
     @NotBlank(message = "Employee name cannot be blank")
-    @Size(min = 2, max = 100, message = "Name must be between 2 and 100 characters")
+    @Pattern(regexp = "^[a-zA-Z\\s\\p{L}'()\\-]+$", message = "Name contains invalid characters")
     String name,
 
     @NotBlank(message = "Employee role cannot be blank")
@@ -18,5 +15,12 @@ public record EmployeeDto(
 
     @NotNull(message = "Salary cannot be null")
     @Min(value = 0, message = "Salary must be a non-negative number")
-    Long salary) 
+    @Max(value = 500000, message = "Salary exceeds maximum company allowance")
+    Long salary,
+
+    @NotBlank(message = "Email address cannot be blank")
+    @Email(message = "Must be a well-formed email address")
+    @Pattern(regexp = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$", message = "Strict email format check failed")
+    String email
+)
 { }

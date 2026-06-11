@@ -95,7 +95,7 @@ public class DataLoaderService {
             String[] row = line.split(",");
 
             // Column Count Validation
-            if (row.length != 4) {
+            if (row.length != 5) {
                 logger.error("Skipping line: Invalid column count (Expected 4, got {}). Line: [{}]", row.length, line);
                 return Optional.empty();
             }
@@ -105,6 +105,7 @@ public class DataLoaderService {
             String name = row[1].trim();
             String role = row[2].trim();
             String salaryStr = row[3].trim();
+            String email = row[4].trim();
 
             // Column 1 Validation: ID must be a number
             int id;
@@ -140,8 +141,14 @@ public class DataLoaderService {
                 return Optional.empty();
             }
 
+            // Column 5 Validation: Email cannot be empty
+            if (role.isEmpty()) {
+                logger.error("Skipping line: Email column is missing or blank. Line: [{}]", line);
+                return Optional.empty();
+            }
+
             // Everything is valid! Return the record object packed inside an Optional
-            return Optional.of(new Employee(name, role, salary));
+            return Optional.of(new Employee(name, role, salary, email));
 
         } catch (Exception e) {
             logger.error("Skipping line: Unexpected parsing error: {}. Line: [{}]", e.getMessage(), line);
