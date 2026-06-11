@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Keep standard console logging -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml" />
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml" />
+
+    <!-- Create an Appender that instantly writes and flushes to the skip file -->
+    <appender name="SKIP_FILE" class="ch.qos.logback.core.FileAppender">
+        <file>logs/skipped_records.log</file>
+        <append>true</append>
+        <immediateFlush>true</immediateFlush> <!-- Guarantees line is instantly written -->
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Create an isolated Logger for our Audit trail -->
+    <logger name="auditLogger" level="INFO" additivity="false">
+        <appender-ref ref="SKIP_FILE" />
+    </logger>
+
+    <!-- Root logger handles standard application output -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE" />
+    </root>
+</configuration>
