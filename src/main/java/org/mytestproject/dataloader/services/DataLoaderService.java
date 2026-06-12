@@ -1,9 +1,13 @@
 package org.mytestproject.dataloader.services;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
+import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -13,19 +17,24 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 @Service
 @Slf4j
 public class DataLoaderService {
 
+    private static final Logger auditLogger = LoggerFactory.getLogger("auditLogger");
+
     @Value("classpath:data.txt")
     private Resource dataFile;
 
     private final EmployeeRepository employeeRepository;
+    private final Validator validator;
 
-    public DataLoaderService(EmployeeRepository employeeRepository){
+    public DataLoaderService(EmployeeRepository employeeRepository, Validator validator){
         this.employeeRepository = employeeRepository;
+        this.validator = validator;
     }
 
     public boolean loadLocalDataFile(){
@@ -80,15 +89,22 @@ public class DataLoaderService {
             batch.clear(); // Wipe memory immediately for GC
             return savedCount;
         } catch (Exception e) {
+            String errorMsg = e.getMessage();
             log.error("Failed to save batch of {} records. Error: {}. Skipping this chunk to maintain resiliency.",
-                    batch.size(), e.getMessage());
+                    batch.size(), errorMsg);
+
+            for (Employee employee : batch) {
+                auditLogger.info("PHASE: WRITE_DATABASE | RECORD ID: {} | ERROR: {}", employee.getEmployeeName(), errorMsg);
+            }
+
             batch.clear(); // Still clear memory to prevent memory leaks
             return 0;
         }
     }
 
     /**
-     * Helper method to validate every column and handle parsing errors safely.
+     * Parses each column, then runs the same EmployeeDto Jakarta Bean Validation rules
+     * the Spring Batch job applies via BeanValidatingItemProcessor.
      */
     private Optional<Employee> validateAndParse(String line, Logger logger) {
         try {
@@ -96,62 +112,52 @@ public class DataLoaderService {
 
             // Column Count Validation
             if (row.length != 5) {
-                logger.error("Skipping line: Invalid column count (Expected 4, got {}). Line: [{}]", row.length, line);
+                String errorMsg = String.format("Invalid column count (Expected 5, got %d)", row.length);
+                logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
+                auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
                 return Optional.empty();
             }
 
-            // Clean whitespaces from all inputs
+            // Clean whitespaces from all inputs id,employeeName,email,role,salary
             String idStr = row[0].trim();
             String name = row[1].trim();
-            String role = row[2].trim();
-            String salaryStr = row[3].trim();
-            String email = row[4].trim();
+            String email = row[2].trim();
+            String role = row[3].trim();
+            String salaryStr = row[4].trim();
 
-            // Column 1 Validation: ID must be a number
+            // ID and Salary must be numeric to even build the DTO (mirrors FlatFileItemReader read failures)
             int id;
-            try {
-                id = Integer.parseInt(idStr);
-            } catch (NumberFormatException e) {
-                logger.error("Skipping line: ID [{}] is not a valid integer. Line: [{}]", idStr, line);
-                return Optional.empty();
-            }
-
-            // Column 2 Validation: Name cannot be empty
-            if (name.isEmpty()) {
-                logger.error("Skipping line: Name column is missing or blank. Line: [{}]", line);
-                return Optional.empty();
-            }
-
-            // Column 3 Validation: Role cannot be empty
-            if (role.isEmpty()) {
-                logger.error("Skipping line: Role column is missing or blank. Line: [{}]", line);
-                return Optional.empty();
-            }
-
-            // Column 4 Validation: Salary must be a number and non-negative
             long salary;
             try {
+                id = Integer.parseInt(idStr);
                 salary = Long.parseLong(salaryStr);
-                if (salary < 0) {
-                    logger.error("Skipping line: Salary [{}] cannot be negative. Line: [{}]", salaryStr, line);
-                    return Optional.empty();
-                }
             } catch (NumberFormatException e) {
-                logger.error("Skipping line: Salary [{}] is not a valid number. Line: [{}]", salaryStr, line);
+                String errorMsg = String.format("Parsing error: %s", e.getMessage());
+                logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
+                auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
                 return Optional.empty();
             }
 
-            // Column 5 Validation: Email cannot be empty
-            if (role.isEmpty()) {
-                logger.error("Skipping line: Email column is missing or blank. Line: [{}]", line);
+            // Run the same validation rules as the Spring Batch job's jsrValidator
+            EmployeeDto dto = new EmployeeDto(id, name, role, salary, email);
+            Set<ConstraintViolation<EmployeeDto>> violations = validator.validate(dto);
+
+            if (!violations.isEmpty()) {
+                for (ConstraintViolation<EmployeeDto> violation : violations) {
+                    String errorMsg = String.format("Field '%s' %s", violation.getPropertyPath(), violation.getMessage());
+                    logger.error("Skipping line [ID: {}]: {}", id, errorMsg);
+                    auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", id, errorMsg);
+                }
                 return Optional.empty();
             }
 
-            // Everything is valid! Return the record object packed inside an Optional
-            return Optional.of(new Employee(name, role, salary, email));
+            // Everything is valid! Map to entity, same as SpringBatchConfig's entityMapper
+            return Optional.of(new Employee(dto.name(), dto.role(), dto.salary(), dto.email()));
 
         } catch (Exception e) {
-            logger.error("Skipping line: Unexpected parsing error: {}. Line: [{}]", e.getMessage(), line);
+            String errorMsg = e.getMessage();
+            logger.error("Skipping line: Unexpected parsing error: {}. Line: [{}]", errorMsg, line);
+            auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
             return Optional.empty();
         }
     }

@@ -1,5 +1,8 @@
 package org.mytestproject.dataloader.configurations;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import org.mytestproject.dataloader.entities.Employee;
 import org.mytestproject.dataloader.listeners.EmployeeSkipListener;
 import org.mytestproject.dataloader.listeners.JobPerformanceListener;
@@ -14,7 +17,6 @@ import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.batch.infrastructure.item.file.FlatFileItemReader;
 import org.springframework.batch.infrastructure.item.file.builder.FlatFileItemReaderBuilder;
 import org.springframework.batch.infrastructure.item.support.CompositeItemProcessor;
-import org.springframework.batch.infrastructure.item.validator.BeanValidatingItemProcessor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -25,6 +27,7 @@ import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.transaction.PlatformTransactionManager;
 import javax.sql.DataSource;
 import java.util.List;
+import java.util.Set;
 
 @Configuration
 public class SpringBatchConfig {
@@ -38,10 +41,14 @@ public class SpringBatchConfig {
 
     private final JobPerformanceListener jobPerformanceListener;
 
-    public SpringBatchConfig(EmployeeRepository employeeRepository, EmployeeSkipListener employeeSkipListener, JobPerformanceListener jobPerformanceListener) {
+    private final Validator validator;
+
+    public SpringBatchConfig(EmployeeRepository employeeRepository, EmployeeSkipListener employeeSkipListener,
+                              JobPerformanceListener jobPerformanceListener, Validator validator) {
         this.employeeRepository = employeeRepository;
         this.employeeSkipListener = employeeSkipListener;
         this.jobPerformanceListener = jobPerformanceListener;
+        this.validator = validator;
     }
 
     @Bean
@@ -62,13 +69,16 @@ public class SpringBatchConfig {
 
     // 1. The Validation Engine Bean
     @Bean
-    public BeanValidatingItemProcessor<EmployeeDto> jsrValidator() throws Exception {
-        BeanValidatingItemProcessor<EmployeeDto> processor = new BeanValidatingItemProcessor<>();
-        // CRITICAL: Set to true so bad rows throw a ValidationException and trigger a Skip,
-        // instead of throwing a critical error that terminates the whole job.
-        processor.setFilter(false);
-        processor.afterPropertiesSet();
-        return processor;
+    public ItemProcessor<EmployeeDto, EmployeeDto> jsrValidator() {
+        return dto -> {
+            Set<ConstraintViolation<EmployeeDto>> violations = validator.validate(dto);
+            if (!violations.isEmpty()) {
+                // Throwing here lets the step's fault-tolerant skip handling and
+                // EmployeeSkipListener.onSkipInProcess take over, mirroring DataLoaderService.
+                throw new ConstraintViolationException(violations);
+            }
+            return dto;
+        };
     }
 
     // 2. The Clean Mapping Bean (Only runs if validation passes)
@@ -80,7 +90,7 @@ public class SpringBatchConfig {
     // 3. The Composite Pipeline Bean (Combines Validation + Mapping)
     @Bean
     public CompositeItemProcessor<EmployeeDto, Employee> processor(
-            BeanValidatingItemProcessor<EmployeeDto> jsrValidator,
+            ItemProcessor<EmployeeDto, EmployeeDto> jsrValidator,
             ItemProcessor<EmployeeDto, Employee> entityMapper) {
 
         CompositeItemProcessor<EmployeeDto, Employee> compositeProcessor = new CompositeItemProcessor<>();

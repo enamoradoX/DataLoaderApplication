@@ -35,19 +35,26 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
     public void onSkipInProcess(EmployeeDto item, Throwable t) {
         String recordId = (item != null) ? String.valueOf(item.id()) : "UNKNOWN";
 
-        // Leveraging Java 21+ pattern matching for instanceof
-        if (t.getCause() instanceof ConstraintViolationException violationException) {
+        // jsrValidator throws ConstraintViolationException directly; fall back to the cause
+        // in case the step ever wraps it.
+        ConstraintViolationException violationException = switch (t) {
+            case ConstraintViolationException cve -> cve;
+            case Throwable other when other.getCause() instanceof ConstraintViolationException cve -> cve;
+            default -> null;
+        };
+
+        if (violationException != null) {
             violationException.getConstraintViolations().forEach(violation -> {
                 String errorMsg = String.format("Field '%s' %s", violation.getPropertyPath(), violation.getMessage());
 
-                log.warn("Skipped Row [ID: {}]: {}", recordId, errorMsg);
+                log.error("Skipped Row [ID: {}]: {}", recordId, errorMsg);
                 auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", recordId, errorMsg);
 
                 publishToKafka("PROCESS_VALIDATION", recordId, errorMsg);
             });
         } else {
             String errorMsg = t.getMessage();
-            log.warn("Skipped during PROCESS [ID: {}]: Reason -> {}", recordId, errorMsg);
+            log.error("Skipped during PROCESS [ID: {}]: Reason -> {}", recordId, errorMsg);
             auditLogger.info("PHASE: PROCESS | RECORD ID: {} | ERROR: {}", recordId, errorMsg);
 
             publishToKafka("PROCESS", recordId, errorMsg);
