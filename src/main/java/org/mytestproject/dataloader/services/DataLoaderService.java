@@ -31,10 +31,13 @@ public class DataLoaderService {
 
     private final EmployeeRepository employeeRepository;
     private final Validator validator;
+    private final SkipEventPublisher skipEventPublisher;
 
-    public DataLoaderService(EmployeeRepository employeeRepository, Validator validator){
+    public DataLoaderService(EmployeeRepository employeeRepository, Validator validator,
+                             SkipEventPublisher skipEventPublisher){
         this.employeeRepository = employeeRepository;
         this.validator = validator;
+        this.skipEventPublisher = skipEventPublisher;
     }
 
     public boolean loadLocalDataFile(){
@@ -95,6 +98,7 @@ public class DataLoaderService {
 
             for (Employee employee : batch) {
                 auditLogger.info("PHASE: WRITE_DATABASE | RECORD ID: {} | ERROR: {}", employee.getEmployeeName(), errorMsg);
+                skipEventPublisher.publish("WRITE_DATABASE", employee.getEmployeeName(), errorMsg);
             }
 
             batch.clear(); // Still clear memory to prevent memory leaks
@@ -115,6 +119,7 @@ public class DataLoaderService {
                 String errorMsg = String.format("Invalid column count (Expected 5, got %d)", row.length);
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
+                skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
                 return Optional.empty();
             }
 
@@ -135,6 +140,7 @@ public class DataLoaderService {
                 String errorMsg = String.format("Parsing error: %s", e.getMessage());
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
+                skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
                 return Optional.empty();
             }
 
@@ -147,6 +153,7 @@ public class DataLoaderService {
                     String errorMsg = String.format("Field '%s' %s", violation.getPropertyPath(), violation.getMessage());
                     logger.error("Skipping line [ID: {}]: {}", id, errorMsg);
                     auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", id, errorMsg);
+                    skipEventPublisher.publish("PROCESS_VALIDATION", String.valueOf(id), errorMsg);
                 }
                 return Optional.empty();
             }
@@ -158,6 +165,7 @@ public class DataLoaderService {
             String errorMsg = e.getMessage();
             logger.error("Skipping line: Unexpected parsing error: {}. Line: [{}]", errorMsg, line);
             auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
+            skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
             return Optional.empty();
         }
     }
