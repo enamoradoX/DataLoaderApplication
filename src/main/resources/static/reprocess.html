@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reprocess Skipped Record</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 540px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+        h1 { font-size: 1.3rem; }
+        label { display: block; margin: 0.85rem 0 0.25rem; font-weight: 600; font-size: 0.9rem; }
+        input { width: 100%; padding: 0.5rem; font-size: 1rem; box-sizing: border-box; border: 1px solid #bbb; border-radius: 4px; }
+        button { margin-top: 1.25rem; padding: 0.6rem 1.2rem; font-size: 1rem; border: 0; border-radius: 4px; background: #2563eb; color: #fff; cursor: pointer; }
+        button:disabled { background: #9bb6f0; cursor: default; }
+        #result { margin-top: 1.25rem; padding: 0.85rem 1rem; border-radius: 4px; display: none; }
+        #result.ok { display: block; background: #e7f6ec; border: 1px solid #34a853; }
+        #result.err { display: block; background: #fdecea; border: 1px solid #d93025; }
+        #result ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
+    </style>
+</head>
+<body>
+    <h1>Reprocess Skipped Record</h1>
+    <p>Correct the values below and resubmit. The record is re-checked with the same validation rules as the loaders.</p>
+
+    <form id="reprocess-form">
+        <label for="id">ID</label>
+        <input id="id" name="id" type="text" autocomplete="off">
+
+        <label for="name">Name</label>
+        <input id="name" name="name" type="text" autocomplete="off">
+
+        <label for="email">Email</label>
+        <input id="email" name="email" type="text" autocomplete="off">
+
+        <label for="role">Role</label>
+        <input id="role" name="role" type="text" autocomplete="off">
+
+        <label for="salary">Salary</label>
+        <input id="salary" name="salary" type="text" autocomplete="off">
+
+        <button type="submit" id="submit-btn">Reprocess</button>
+    </form>
+
+    <div id="result"></div>
+
+    <script>
+        const FIELDS = ["id", "name", "email", "role", "salary"];
+
+        // Prefill the form from the query string (the link in the alert email).
+        const params = new URLSearchParams(window.location.search);
+        FIELDS.forEach(f => {
+            if (params.has(f)) document.getElementById(f).value = params.get(f);
+        });
+
+        const form = document.getElementById("reprocess-form");
+        const resultEl = document.getElementById("result");
+        const submitBtn = document.getElementById("submit-btn");
+
+        form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            resultEl.className = "";
+            resultEl.style.display = "none";
+
+            const payload = {};
+            FIELDS.forEach(f => payload[f] = document.getElementById(f).value);
+
+            try {
+                const resp = await fetch("/api/reprocess", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const body = await resp.json();
+
+                if (resp.ok && body.success) {
+                    resultEl.className = "ok";
+                    resultEl.textContent = "Saved successfully as employee id " + body.savedId + ".";
+                } else {
+                    resultEl.className = "err";
+                    const errs = (body.errors && body.errors.length)
+                        ? body.errors
+                        : ["Reprocess failed (HTTP " + resp.status + ")."];
+                    resultEl.innerHTML = "<strong>Could not save:</strong><ul>"
+                        + errs.map(x => "<li>" + escapeHtml(x) + "</li>").join("")
+                        + "</ul>";
+                }
+            } catch (err) {
+                resultEl.className = "err";
+                resultEl.textContent = "Request failed: " + err.message;
+            } finally {
+                submitBtn.disabled = false;
+            }
+        });
+
+        function escapeHtml(s) {
+            return s.replace(/[&<>"']/g, c => ({
+                "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+            }[c]));
+        }
+    </script>
+</body>
+</html>

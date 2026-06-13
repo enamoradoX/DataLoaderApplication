@@ -22,10 +22,13 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
+import org.springframework.core.retry.RetryPolicy;
+import org.springframework.dao.TransientDataAccessException;
 import org.springframework.jdbc.datasource.init.DataSourceInitializer;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.transaction.PlatformTransactionManager;
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 
@@ -116,6 +119,24 @@ public class SpringBatchConfig {
                 .build();
     }
 
+    /**
+     * Spring Batch 6 / Spring Framework 7 fold retry + backoff into a single RetryPolicy.
+     * Retry only TRANSIENT db failures (deadlock, lock timeout, dropped connection), with
+     * exponential backoff: wait 1s, then 2s, then 4s (capped at 10s) between attempts.
+     * Validation/parse failures are deterministic, so they are excluded and fall straight
+     * through to skip.
+     */
+    @Bean
+    public RetryPolicy writeRetryPolicy() {
+        return RetryPolicy.builder()
+                .maxRetries(3) // up to 3 retries after the first attempt before the item is skipped
+                .delay(Duration.ofSeconds(1))
+                .multiplier(2.0)        // 1s -> 2s -> 4s ...
+                .maxDelay(Duration.ofSeconds(10)) // never wait more than 10s
+                .includes(List.of(TransientDataAccessException.class))
+                .build();
+    }
+
     @Bean
     public Step csvFileLoadingStep(JobRepository jobRepository,
                                    PlatformTransactionManager transactionManager) throws Exception { // 1. Inject the writer bean here
@@ -129,6 +150,7 @@ public class SpringBatchConfig {
                     employeeRepository.saveAll(chunk.getItems());
                 })
                 .faultTolerant()
+                .retryPolicy(writeRetryPolicy()) // transient-only retry + backoff (see writeRetryPolicy)
                 .skip(Exception.class)
                 .skipLimit(100)
                 .listener(employeeSkipListener)

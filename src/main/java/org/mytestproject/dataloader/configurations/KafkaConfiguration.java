@@ -97,11 +97,13 @@ public class KafkaConfiguration {
      * The container factory referenced by @KafkaListener(containerFactory = "skipEventKafkaListenerContainerFactory").
      */
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, SkipEvent> skipEventKafkaListenerContainerFactory(
-            ConsumerFactory<String, SkipEvent> consumerFactory) {
-        ConcurrentKafkaListenerContainerFactory<String, SkipEvent> factory =
-                new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(consumerFactory);
-        return factory;
-    }
+    public ConcurrentKafkaListenerContainerFactory<String, SkipEvent>
+        skipEventKafkaListenerContainerFactory(ConsumerFactory<String, SkipEvent> consumerFactory) {
+
+            ConcurrentKafkaListenerContainerFactory<String, SkipEvent> factory =
+                    new ConcurrentKafkaListenerContainerFactory<>();
+            factory.setConsumerFactory(consumerFactory);
+
+            return factory;
+        }
 }

@@ -6,5 +6,6 @@ public record SkipEvent(
         String phase,
         String recordId,
         String errorMessage,
-        Instant timestamp
+        Instant timestamp,
+        EmployeeRecordData data // the original row, when available, so it can be shown and reprocessed; null otherwise
 ) {}

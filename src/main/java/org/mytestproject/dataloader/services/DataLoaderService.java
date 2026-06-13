@@ -5,6 +5,7 @@ import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
 import org.mytestproject.dataloader.models.EmployeeDto;
+import org.mytestproject.dataloader.models.EmployeeRecordData;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -98,7 +100,13 @@ public class DataLoaderService {
 
             for (Employee employee : batch) {
                 auditLogger.info("PHASE: WRITE_DATABASE | RECORD ID: {} | ERROR: {}", employee.getEmployeeName(), errorMsg);
-                skipEventPublisher.publish("WRITE_DATABASE", employee.getEmployeeName(), errorMsg);
+                EmployeeRecordData data = new EmployeeRecordData(
+                        Objects.toString(employee.getId(), null),
+                        employee.getEmployeeName(),
+                        employee.getEmail(),
+                        employee.getRole(),
+                        Objects.toString(employee.getSalary(), null));
+                skipEventPublisher.publish("WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
             }
 
             batch.clear(); // Still clear memory to prevent memory leaks
@@ -140,7 +148,9 @@ public class DataLoaderService {
                 String errorMsg = String.format("Parsing error: %s", e.getMessage());
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
-                skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
+                // The columns split cleanly even though a number didn't parse, so carry the raw row.
+                EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, role, salaryStr);
+                skipEventPublisher.publish("READ", "UNKNOWN", errorMsg, data);
                 return Optional.empty();
             }
 
@@ -149,11 +159,12 @@ public class DataLoaderService {
             Set<ConstraintViolation<EmployeeDto>> violations = validator.validate(dto);
 
             if (!violations.isEmpty()) {
+                EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, role, salaryStr);
                 for (ConstraintViolation<EmployeeDto> violation : violations) {
                     String errorMsg = String.format("Field '%s' %s", violation.getPropertyPath(), violation.getMessage());
                     logger.error("Skipping line [ID: {}]: {}", id, errorMsg);
                     auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", id, errorMsg);
-                    skipEventPublisher.publish("PROCESS_VALIDATION", String.valueOf(id), errorMsg);
+                    skipEventPublisher.publish("PROCESS_VALIDATION", String.valueOf(id), errorMsg, data);
                 }
                 return Optional.empty();
             }

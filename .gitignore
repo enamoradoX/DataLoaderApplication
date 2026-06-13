@@ -7,6 +7,9 @@ target/
 ### Runtime logs ###
 logs/
 
+### Claude Code (personal/machine-specific overrides) ###
+.claude/settings.local.json
+
 ### STS ###
 .apt_generated
 .classpath

@@ -4,12 +4,14 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
 import org.mytestproject.dataloader.models.EmployeeDto;
+import org.mytestproject.dataloader.models.EmployeeRecordData;
 import org.mytestproject.dataloader.services.SkipEventPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.listener.SkipListener;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.stereotype.Component;
+import java.util.Objects;
 
 @Component
 @Slf4j
@@ -25,12 +27,14 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
         log.error("Skipped during READ: Formatting/Parsing failure -> {}", errorMsg);
         auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
 
+        // No item is available on a read failure, so there is no row payload to carry.
         skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
     }
 
     @Override
     public void onSkipInProcess(EmployeeDto item, Throwable t) {
         String recordId = (item != null) ? String.valueOf(item.id()) : "UNKNOWN";
+        EmployeeRecordData data = toRecordData(item);
 
         // jsrValidator throws ConstraintViolationException directly; fall back to the cause
         // in case the step ever wraps it.
@@ -47,14 +51,14 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
                 log.error("Skipped Row [ID: {}]: {}", recordId, errorMsg);
                 auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", recordId, errorMsg);
 
-                skipEventPublisher.publish("PROCESS_VALIDATION", recordId, errorMsg);
+                skipEventPublisher.publish("PROCESS_VALIDATION", recordId, errorMsg, data);
             });
         } else {
             String errorMsg = t.getMessage();
             log.error("Skipped during PROCESS [ID: {}]: Reason -> {}", recordId, errorMsg);
             auditLogger.info("PHASE: PROCESS | RECORD ID: {} | ERROR: {}", recordId, errorMsg);
 
-            skipEventPublisher.publish("PROCESS", recordId, errorMsg);
+            skipEventPublisher.publish("PROCESS", recordId, errorMsg, data);
         }
     }
 
@@ -66,6 +70,30 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
         log.error("Skipped during WRITE [Name: {}]: Database Constraint Failure -> {}", name, errorMsg);
         auditLogger.info("PHASE: WRITE_DATABASE | RECORD ID: {} | ERROR: {}", name, errorMsg);
 
-        skipEventPublisher.publish("WRITE_DATABASE", name, errorMsg);
+        skipEventPublisher.publish("WRITE_DATABASE", name, errorMsg, toRecordData(item));
+    }
+
+    private EmployeeRecordData toRecordData(EmployeeDto item) {
+        if (item == null) {
+            return null;
+        }
+        return new EmployeeRecordData(
+                Objects.toString(item.id(), null),
+                item.name(),
+                item.email(),
+                item.role(),
+                Objects.toString(item.salary(), null));
+    }
+
+    private EmployeeRecordData toRecordData(Employee item) {
+        if (item == null) {
+            return null;
+        }
+        return new EmployeeRecordData(
+                Objects.toString(item.getId(), null),
+                item.getEmployeeName(),
+                item.getEmail(),
+                item.getRole(),
+                Objects.toString(item.getSalary(), null));
     }
 }
