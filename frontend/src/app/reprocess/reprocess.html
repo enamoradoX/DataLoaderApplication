@@ -1,0 +1,37 @@
+<h1>Reprocess Skipped Record</h1>
+<p>Correct the values below and resubmit. The record is re-checked with the same validation rules as the loaders.</p>
+
+<form [formGroup]="form" (ngSubmit)="submit()">
+  <label for="id">ID</label>
+  <input id="id" type="text" formControlName="id" autocomplete="off">
+
+  <label for="name">Name</label>
+  <input id="name" type="text" formControlName="name" autocomplete="off">
+
+  <label for="email">Email</label>
+  <input id="email" type="text" formControlName="email" autocomplete="off">
+
+  <label for="role">Role</label>
+  <input id="role" type="text" formControlName="role" autocomplete="off">
+
+  <label for="salary">Salary</label>
+  <input id="salary" type="text" formControlName="salary" autocomplete="off">
+
+  <button type="submit" [disabled]="submitting()">Reprocess</button>
+</form>
+
+@if (result(); as r) {
+  @if (r.success) {
+    <div class="result ok">Saved successfully as employee id {{ r.savedId }}.</div>
+  } @else {
+    <div class="result err">
+      <strong>Could not save:</strong>
+      <ul>
+        @for (e of r.errors; track e) { <li>{{ e }}</li> }
+      </ul>
+    </div>
+  }
+}
+@if (requestError(); as msg) {
+  <div class="result err">Request failed: {{ msg }}</div>
+}

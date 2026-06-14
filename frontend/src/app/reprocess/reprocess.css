@@ -1,0 +1,51 @@
+/* Mirrors the look of the original static reprocess.html, scoped to this component.
+   :host replaces the old body-level rules (the component renders inside <app-root>). */
+:host {
+  display: block;
+  font-family: system-ui, sans-serif;
+  max-width: 540px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+  color: #1a1a1a;
+}
+
+h1 { font-size: 1.3rem; }
+
+label {
+  display: block;
+  margin: 0.85rem 0 0.25rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+input {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 1rem;
+  box-sizing: border-box;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+}
+
+button {
+  margin-top: 1.25rem;
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  border: 0;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+}
+
+button:disabled { background: #9bb6f0; cursor: default; }
+
+.result {
+  margin-top: 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 4px;
+}
+
+.result.ok { background: #e7f6ec; border: 1px solid #34a853; }
+.result.err { background: #fdecea; border: 1px solid #d93025; }
+.result ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
