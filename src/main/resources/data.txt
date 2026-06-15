@@ -1,14 +1,14 @@
-id,employeeName,email,role,salary
-2001,José Javier Óñiz,jose.oniz@domain.es,Senior Architect,145000
-2002,Chun Li (李春),chun.li@asia.cn,Staff Engineer,160000
-2003,John Doe,   j.doe@space.com   ,   Data Scientist   ,115000
-2004,Jane-Sébastien M'G调,jane.mg@corp.ca,VP of Engineering,250000
-2005,Negative ID Test,neg.id@test.com,Developer,-12000
-2006,Rich Employee,rich@test.com,CEO,2147483647
-2007,Overflow Employee,overflow@test.com,Founder,9999999999999999
-2008,Missing At Sign,no-at-domain.com,Analyst,60000
-2009,Multiple @@ Signs,user@@domain.com,Analyst,65000
-2010,Name with Numbers 123,num.name@test.com,Developer,80000
-2011,Admin '; DROP TABLE EMPLOYEE; --,sql@inject.com,Security,90000
-2022,Test Christian,christian@test.com,Intern,30000
-2012,Valid End Record,final.valid@test.com,Database Developer,105000
+id,employeeName,email,department,role,salary
+2001,José Javier Óñiz,jose.oniz@domain.es,Engineering,Senior Architect,145000
+2002,Chun Li (李春),chun.li@asia.cn,Engineering,Staff Engineer,160000
+2003,John Doe,   j.doe@space.com   ,Data,   Data Scientist   ,115000
+2004,Jane-Sébastien M'G调,jane.mg@corp.ca,Engineering,VP of Engineering,250000
+2005,Negative ID Test,neg.id@test.com,Engineering,Developer,-12000
+2006,Rich Employee,rich@test.com,Executive,CEO,2147483647
+2007,Overflow Employee,overflow@test.com,Executive,Founder,9999999999999999
+2008,Missing At Sign,no-at-domain.com,Analytics,Analyst,60000
+2009,Multiple @@ Signs,user@@domain.com,Analytics,Analyst,65000
+2010,Name with Numbers 123,num.name@test.com,Engineering,Developer,80000
+2011,Admin '; DROP TABLE EMPLOYEE; --,sql@inject.com,Security,Security,90000
+2022,Test Christian,christian@test.com,Engineering,Intern,30000
+2012,Valid End Record,final.valid@test.com,Data,Database Developer,105000

@@ -102,6 +102,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
                 Objects.toString(item.id(), null),
                 item.name(),
                 item.email(),
+                item.department(),
                 item.role(),
                 Objects.toString(item.salary(), null));
     }
@@ -114,6 +115,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
                 Objects.toString(item.getId(), null),
                 item.getEmployeeName(),
                 item.getEmail(),
+                item.getDepartment() != null ? item.getDepartment().getName() : null,
                 item.getRole(),
                 Objects.toString(item.getSalary(), null));
     }

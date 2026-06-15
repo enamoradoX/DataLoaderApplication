@@ -12,6 +12,7 @@ public record EmployeeRecordData(
         String id,
         String name,
         String email,
+        String department,
         String role,
         String salary
 ) {}

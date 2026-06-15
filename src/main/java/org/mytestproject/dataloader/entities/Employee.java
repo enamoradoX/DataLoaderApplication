@@ -6,11 +6,12 @@ import jakarta.persistence.*;
 @Table(name="Employee")
 public class Employee {
 
-    public Employee(String employeeName, String role, Long salary, String email){
+    public Employee(String employeeName, String role, Long salary, String email, Department department){
         this.employeeName = employeeName;
         this.role = role;
         this.salary = salary;
         this.email = email;
+        this.department = department;
     }
 
     @Id
@@ -28,6 +29,10 @@ public class Employee {
 
     @Column(name = "emp_Email")
     private String email;
+
+    @ManyToOne
+    @JoinColumn(name = "department_id")
+    private Department department;
 
    public Employee() {
 
@@ -71,5 +76,13 @@ public class Employee {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public Department getDepartment() {
+        return department;
+    }
+
+    public void setDepartment(Department department) {
+        this.department = department;
     }
 }

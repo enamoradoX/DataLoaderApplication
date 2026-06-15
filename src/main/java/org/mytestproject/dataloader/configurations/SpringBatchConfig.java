@@ -8,6 +8,7 @@ import org.mytestproject.dataloader.listeners.EmployeeSkipListener;
 import org.mytestproject.dataloader.listeners.JobPerformanceListener;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
+import org.mytestproject.dataloader.services.DepartmentService;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
@@ -46,12 +47,16 @@ public class SpringBatchConfig {
 
     private final Validator validator;
 
+    private final DepartmentService departmentService;
+
     public SpringBatchConfig(EmployeeRepository employeeRepository, EmployeeSkipListener employeeSkipListener,
-                              JobPerformanceListener jobPerformanceListener, Validator validator) {
+                              JobPerformanceListener jobPerformanceListener, Validator validator,
+                              DepartmentService departmentService) {
         this.employeeRepository = employeeRepository;
         this.employeeSkipListener = employeeSkipListener;
         this.jobPerformanceListener = jobPerformanceListener;
         this.validator = validator;
+        this.departmentService = departmentService;
     }
 
     @Bean
@@ -84,10 +89,12 @@ public class SpringBatchConfig {
         };
     }
 
-    // 2. The Clean Mapping Bean (Only runs if validation passes)
+    // 2. The Clean Mapping Bean (Only runs if validation passes). Resolves the Department FK
+    //    via find-or-create so JPA writes department_id when the Employee is saved.
     @Bean
     public ItemProcessor<EmployeeDto, Employee> entityMapper() {
-        return emp -> new Employee(emp.name(), emp.role(), emp.salary(), emp.email());
+        return dto -> new Employee(dto.name(), dto.role(), dto.salary(), dto.email(),
+                departmentService.getOrCreate(dto.department()));
     }
 
     // 3. The Composite Pipeline Bean (Combines Validation + Mapping)
@@ -108,13 +115,14 @@ public class SpringBatchConfig {
                 .resource(dataFile)
                 .linesToSkip(1) // Skip header row
                 .delimited()
-                .names("id","employeeName","email","role","salary")
+                .names("id","employeeName","email","department","role","salary")
                 .fieldSetMapper(fieldSet -> new EmployeeDto(
                         fieldSet.readInt("id"),
                         fieldSet.readString("employeeName"),
                         fieldSet.readString("role"),
                         fieldSet.readLong("salary"),
-                        fieldSet.readString("email")
+                        fieldSet.readString("email"),
+                        fieldSet.readString("department")
                 ))
                 .build();
     }

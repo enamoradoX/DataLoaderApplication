@@ -21,6 +21,9 @@ public record EmployeeDto(
     @NotBlank(message = "Email address cannot be blank")
     @Email(message = "Must be a well-formed email address")
     @Pattern(regexp = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$", message = "Strict email format check failed")
-    String email
+    String email,
+
+    @NotBlank(message = "Department cannot be blank")
+    String department
 )
 { }

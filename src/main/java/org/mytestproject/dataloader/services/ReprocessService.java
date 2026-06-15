@@ -27,12 +27,14 @@ public class ReprocessService {
     private final EmployeeRepository employeeRepository;
     private final Validator validator;
     private final SkippedRecordService skippedRecordService;
+    private final DepartmentService departmentService;
 
     public ReprocessService(EmployeeRepository employeeRepository, Validator validator,
-                            SkippedRecordService skippedRecordService) {
+                            SkippedRecordService skippedRecordService, DepartmentService departmentService) {
         this.employeeRepository = employeeRepository;
         this.validator = validator;
         this.skippedRecordService = skippedRecordService;
+        this.departmentService = departmentService;
     }
 
     /**
@@ -75,7 +77,8 @@ public class ReprocessService {
         }
 
         // Same Jakarta Bean Validation rules the Spring Batch job and legacy loader apply.
-        EmployeeDto dto = new EmployeeDto(id, safeTrim(data.name()), safeTrim(data.role()), salary, safeTrim(data.email()));
+        EmployeeDto dto = new EmployeeDto(id, safeTrim(data.name()), safeTrim(data.role()), salary,
+                safeTrim(data.email()), safeTrim(data.department()));
         Set<ConstraintViolation<EmployeeDto>> violations = validator.validate(dto);
 
         if (!violations.isEmpty()) {
@@ -85,7 +88,8 @@ public class ReprocessService {
             return ReprocessResult.rejected(errors);
         }
 
-        Employee saved = employeeRepository.save(new Employee(dto.name(), dto.role(), dto.salary(), dto.email()));
+        Employee saved = employeeRepository.save(new Employee(dto.name(), dto.role(), dto.salary(), dto.email(),
+                departmentService.getOrCreate(dto.department())));
         log.info("Reprocessed record saved as employee id {}", saved.getId());
         return ReprocessResult.saved(saved.getId());
     }

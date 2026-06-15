@@ -38,15 +38,17 @@ public class DataLoaderService {
     private final SkipEventPublisher skipEventPublisher;
     private final SkippedRecordService skippedRecordService;
     private final EmailNotificationService emailNotificationService;
+    private final DepartmentService departmentService;
 
     public DataLoaderService(EmployeeRepository employeeRepository, Validator validator,
                              SkipEventPublisher skipEventPublisher, SkippedRecordService skippedRecordService,
-                             EmailNotificationService emailNotificationService){
+                             EmailNotificationService emailNotificationService, DepartmentService departmentService){
         this.employeeRepository = employeeRepository;
         this.validator = validator;
         this.skipEventPublisher = skipEventPublisher;
         this.skippedRecordService = skippedRecordService;
         this.emailNotificationService = emailNotificationService;
+        this.departmentService = departmentService;
     }
 
     public boolean loadLocalDataFile(){
@@ -120,6 +122,7 @@ public class DataLoaderService {
                         Objects.toString(employee.getId(), null),
                         employee.getEmployeeName(),
                         employee.getEmail(),
+                        employee.getDepartment() != null ? employee.getDepartment().getName() : null,
                         employee.getRole(),
                         Objects.toString(employee.getSalary(), null));
                 skipEventPublisher.publish("WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
@@ -140,8 +143,8 @@ public class DataLoaderService {
             String[] row = line.split(",");
 
             // Column Count Validation
-            if (row.length != 5) {
-                String errorMsg = String.format("Invalid column count (Expected 5, got %d)", row.length);
+            if (row.length != 6) {
+                String errorMsg = String.format("Invalid column count (Expected 6, got %d)", row.length);
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
                 skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
@@ -149,12 +152,13 @@ public class DataLoaderService {
                 return Optional.empty();
             }
 
-            // Clean whitespaces from all inputs id,employeeName,email,role,salary
+            // Clean whitespaces from all inputs: id,employeeName,email,department,role,salary
             String idStr = row[0].trim();
             String name = row[1].trim();
             String email = row[2].trim();
-            String role = row[3].trim();
-            String salaryStr = row[4].trim();
+            String department = row[3].trim();
+            String role = row[4].trim();
+            String salaryStr = row[5].trim();
 
             // ID and Salary must be numeric to even build the DTO (mirrors FlatFileItemReader read failures)
             int id;
@@ -167,18 +171,18 @@ public class DataLoaderService {
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
                 // The columns split cleanly even though a number didn't parse, so carry the raw row.
-                EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, role, salaryStr);
+                EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, department, role, salaryStr);
                 skipEventPublisher.publish("READ", "UNKNOWN", errorMsg, data);
                 skippedRecordService.record(loadId, "READ", "UNKNOWN", errorMsg, data);
                 return Optional.empty();
             }
 
             // Run the same validation rules as the Spring Batch job's jsrValidator
-            EmployeeDto dto = new EmployeeDto(id, name, role, salary, email);
+            EmployeeDto dto = new EmployeeDto(id, name, role, salary, email, department);
             Set<ConstraintViolation<EmployeeDto>> violations = validator.validate(dto);
 
             if (!violations.isEmpty()) {
-                EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, role, salaryStr);
+                EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, department, role, salaryStr);
                 for (ConstraintViolation<EmployeeDto> violation : violations) {
                     String errorMsg = String.format("Field '%s' %s", violation.getPropertyPath(), violation.getMessage());
                     logger.error("Skipping line [ID: {}]: {}", id, errorMsg);
@@ -189,8 +193,10 @@ public class DataLoaderService {
                 return Optional.empty();
             }
 
-            // Everything is valid! Map to entity, same as SpringBatchConfig's entityMapper
-            return Optional.of(new Employee(dto.name(), dto.role(), dto.salary(), dto.email()));
+            // Everything is valid! Map to entity, resolving the Department FK (find-or-create),
+            // same as SpringBatchConfig's entityMapper.
+            return Optional.of(new Employee(dto.name(), dto.role(), dto.salary(), dto.email(),
+                    departmentService.getOrCreate(dto.department())));
 
         } catch (Exception e) {
             String errorMsg = e.getMessage();
