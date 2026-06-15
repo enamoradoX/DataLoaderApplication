@@ -28,13 +28,16 @@ public class ReprocessService {
     private final Validator validator;
     private final SkippedRecordService skippedRecordService;
     private final DepartmentService departmentService;
+    private final JobTitleService jobTitleService;
 
     public ReprocessService(EmployeeRepository employeeRepository, Validator validator,
-                            SkippedRecordService skippedRecordService, DepartmentService departmentService) {
+                            SkippedRecordService skippedRecordService, DepartmentService departmentService,
+                            JobTitleService jobTitleService) {
         this.employeeRepository = employeeRepository;
         this.validator = validator;
         this.skippedRecordService = skippedRecordService;
         this.departmentService = departmentService;
+        this.jobTitleService = jobTitleService;
     }
 
     /**
@@ -88,8 +91,8 @@ public class ReprocessService {
             return ReprocessResult.rejected(errors);
         }
 
-        Employee saved = employeeRepository.save(new Employee(dto.name(), dto.role(), dto.salary(), dto.email(),
-                departmentService.getOrCreate(dto.department())));
+        Employee saved = employeeRepository.save(new Employee(dto.id(), dto.name(), jobTitleService.getOrCreate(dto.role()),
+                dto.salary(), dto.email(), departmentService.getOrCreate(dto.department())));
         log.info("Reprocessed record saved as employee id {}", saved.getId());
         return ReprocessResult.saved(saved.getId());
     }

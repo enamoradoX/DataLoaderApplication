@@ -116,7 +116,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
                 item.getEmployeeName(),
                 item.getEmail(),
                 item.getDepartment() != null ? item.getDepartment().getName() : null,
-                item.getRole(),
+                item.getJobTitle() != null ? item.getJobTitle().getTitle() : null,
                 Objects.toString(item.getSalary(), null));
     }
 }

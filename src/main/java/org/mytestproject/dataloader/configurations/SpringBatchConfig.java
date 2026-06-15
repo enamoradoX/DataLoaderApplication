@@ -9,6 +9,9 @@ import org.mytestproject.dataloader.listeners.JobPerformanceListener;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
 import org.mytestproject.dataloader.services.DepartmentService;
+import org.mytestproject.dataloader.services.JobTitleService;
+import org.mytestproject.dataloader.services.ManagerWiringService;
+import org.springframework.batch.infrastructure.repeat.RepeatStatus;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
@@ -49,14 +52,21 @@ public class SpringBatchConfig {
 
     private final DepartmentService departmentService;
 
+    private final JobTitleService jobTitleService;
+
+    private final ManagerWiringService managerWiringService;
+
     public SpringBatchConfig(EmployeeRepository employeeRepository, EmployeeSkipListener employeeSkipListener,
                               JobPerformanceListener jobPerformanceListener, Validator validator,
-                              DepartmentService departmentService) {
+                              DepartmentService departmentService, JobTitleService jobTitleService,
+                              ManagerWiringService managerWiringService) {
         this.employeeRepository = employeeRepository;
         this.employeeSkipListener = employeeSkipListener;
         this.jobPerformanceListener = jobPerformanceListener;
         this.validator = validator;
         this.departmentService = departmentService;
+        this.jobTitleService = jobTitleService;
+        this.managerWiringService = managerWiringService;
     }
 
     @Bean
@@ -93,8 +103,8 @@ public class SpringBatchConfig {
     //    via find-or-create so JPA writes department_id when the Employee is saved.
     @Bean
     public ItemProcessor<EmployeeDto, Employee> entityMapper() {
-        return dto -> new Employee(dto.name(), dto.role(), dto.salary(), dto.email(),
-                departmentService.getOrCreate(dto.department()));
+        return dto -> new Employee(dto.id(), dto.name(), jobTitleService.getOrCreate(dto.role()), dto.salary(),
+                dto.email(), departmentService.getOrCreate(dto.department()));
     }
 
     // 3. The Composite Pipeline Bean (Combines Validation + Mapping)
@@ -115,7 +125,7 @@ public class SpringBatchConfig {
                 .resource(dataFile)
                 .linesToSkip(1) // Skip header row
                 .delimited()
-                .names("id","employeeName","email","department","role","salary")
+                .names("id","employeeName","email","department","role","managerId","salary")
                 .fieldSetMapper(fieldSet -> new EmployeeDto(
                         fieldSet.readInt("id"),
                         fieldSet.readString("employeeName"),
@@ -166,10 +176,26 @@ public class SpringBatchConfig {
     }
 
 
+    /**
+     * Step 2: a Tasklet that wires the manager self-references once all employees exist. Runs
+     * after csvFileLoadingStep (see the job below) because a manager may be loaded after their
+     * report — the classic reason to split work across steps in a Spring Batch job.
+     */
+    @Bean
+    public Step managerWiringStep(JobRepository jobRepository, PlatformTransactionManager transactionManager) {
+        return new StepBuilder("managerWiringStep", jobRepository)
+                .tasklet((contribution, chunkContext) -> {
+                    managerWiringService.wireManagers();
+                    return RepeatStatus.FINISHED;
+                }, transactionManager)
+                .build();
+    }
+
     @Bean(name = "employeeLoaderJob")
-    public Job employeeLoaderJob(JobRepository jobRepository, Step csvFileLoadingStep) {
+    public Job employeeLoaderJob(JobRepository jobRepository, Step csvFileLoadingStep, Step managerWiringStep) {
         return new JobBuilder("employeeLoaderJob", jobRepository)
-                .start(csvFileLoadingStep)
+                .start(csvFileLoadingStep)   // pass 1: load employees (+ Department/JobTitle FKs)
+                .next(managerWiringStep)      // pass 2: resolve manager self-references
                 .listener(jobPerformanceListener)
                 .build();
     }

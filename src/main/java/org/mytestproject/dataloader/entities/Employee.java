@@ -6,9 +6,10 @@ import jakarta.persistence.*;
 @Table(name="Employee")
 public class Employee {
 
-    public Employee(String employeeName, String role, Long salary, String email, Department department){
+    public Employee(Integer employeeNumber, String employeeName, JobTitle jobTitle, Long salary, String email, Department department){
+        this.employeeNumber = employeeNumber;
         this.employeeName = employeeName;
-        this.role = role;
+        this.jobTitle = jobTitle;
         this.salary = salary;
         this.email = email;
         this.department = department;
@@ -18,11 +19,22 @@ public class Employee {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // The business id from the source file (e.g. 2001). Distinct from the generated PK; used to
+    // resolve the manager self-reference by the manager's business id.
+    @Column(name = "employee_number", unique = true)
+    private Integer employeeNumber;
+
     @Column(name = "emp_Name")
     private String employeeName;
 
-    @Column(name = "emp_Role")
-    private String role;
+    // Self-referencing FK: this employee's manager (another Employee). Null for the top of the org.
+    @ManyToOne
+    @JoinColumn(name = "manager_id")
+    private Employee manager;
+
+    @ManyToOne
+    @JoinColumn(name = "job_title_id")
+    private JobTitle jobTitle;
 
     @Column(name = "emp_Salary")
     private Long salary;
@@ -46,6 +58,22 @@ public class Employee {
         return id;
     }
 
+    public Integer getEmployeeNumber() {
+        return employeeNumber;
+    }
+
+    public void setEmployeeNumber(Integer employeeNumber) {
+        this.employeeNumber = employeeNumber;
+    }
+
+    public Employee getManager() {
+        return manager;
+    }
+
+    public void setManager(Employee manager) {
+        this.manager = manager;
+    }
+
     public String getEmployeeName() {
         return employeeName;
     }
@@ -54,12 +82,12 @@ public class Employee {
         this.employeeName = employeeName;
     }
 
-    public String getRole() {
-        return role;
+    public JobTitle getJobTitle() {
+        return jobTitle;
     }
 
-    public void setRole(String role) {
-        this.role = role;
+    public void setJobTitle(JobTitle jobTitle) {
+        this.jobTitle = jobTitle;
     }
 
     public Long getSalary() {

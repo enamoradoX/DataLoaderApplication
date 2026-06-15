@@ -39,16 +39,21 @@ public class DataLoaderService {
     private final SkippedRecordService skippedRecordService;
     private final EmailNotificationService emailNotificationService;
     private final DepartmentService departmentService;
+    private final JobTitleService jobTitleService;
+    private final ManagerWiringService managerWiringService;
 
     public DataLoaderService(EmployeeRepository employeeRepository, Validator validator,
                              SkipEventPublisher skipEventPublisher, SkippedRecordService skippedRecordService,
-                             EmailNotificationService emailNotificationService, DepartmentService departmentService){
+                             EmailNotificationService emailNotificationService, DepartmentService departmentService,
+                             JobTitleService jobTitleService, ManagerWiringService managerWiringService){
         this.employeeRepository = employeeRepository;
         this.validator = validator;
         this.skipEventPublisher = skipEventPublisher;
         this.skippedRecordService = skippedRecordService;
         this.emailNotificationService = emailNotificationService;
         this.departmentService = departmentService;
+        this.jobTitleService = jobTitleService;
+        this.managerWiringService = managerWiringService;
     }
 
     public boolean loadLocalDataFile(){
@@ -87,6 +92,10 @@ public class DataLoaderService {
 
             log.info("Data load complete. Successfully saved {}/{} lines.", totalSaved, totalProcessedLines);
 
+            // Pass 2: wire manager self-references now that all employees exist (mirrors the
+            // batch job's managerWiringStep).
+            managerWiringService.wireManagers();
+
             // One digest email per run for everything skipped under this loadId.
             List<SkippedRecord> skips = skippedRecordService.findByLoad(loadId);
             if (!skips.isEmpty()) {
@@ -123,7 +132,7 @@ public class DataLoaderService {
                         employee.getEmployeeName(),
                         employee.getEmail(),
                         employee.getDepartment() != null ? employee.getDepartment().getName() : null,
-                        employee.getRole(),
+                        employee.getJobTitle() != null ? employee.getJobTitle().getTitle() : null,
                         Objects.toString(employee.getSalary(), null));
                 skipEventPublisher.publish("WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
                 skippedRecordService.record(loadId, "WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
@@ -143,8 +152,8 @@ public class DataLoaderService {
             String[] row = line.split(",");
 
             // Column Count Validation
-            if (row.length != 6) {
-                String errorMsg = String.format("Invalid column count (Expected 6, got %d)", row.length);
+            if (row.length != 7) {
+                String errorMsg = String.format("Invalid column count (Expected 7, got %d)", row.length);
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
                 skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
@@ -152,13 +161,14 @@ public class DataLoaderService {
                 return Optional.empty();
             }
 
-            // Clean whitespaces from all inputs: id,employeeName,email,department,role,salary
+            // Clean whitespaces from all inputs: id,employeeName,email,department,role,managerId,salary
             String idStr = row[0].trim();
             String name = row[1].trim();
             String email = row[2].trim();
             String department = row[3].trim();
             String role = row[4].trim();
-            String salaryStr = row[5].trim();
+            // row[5] = managerId — read and wired in round 3b (the multi-step manager pass)
+            String salaryStr = row[6].trim();
 
             // ID and Salary must be numeric to even build the DTO (mirrors FlatFileItemReader read failures)
             int id;
@@ -193,10 +203,10 @@ public class DataLoaderService {
                 return Optional.empty();
             }
 
-            // Everything is valid! Map to entity, resolving the Department FK (find-or-create),
-            // same as SpringBatchConfig's entityMapper.
-            return Optional.of(new Employee(dto.name(), dto.role(), dto.salary(), dto.email(),
-                    departmentService.getOrCreate(dto.department())));
+            // Everything is valid! Map to entity, resolving the JobTitle + Department FKs
+            // (find-or-create), same as SpringBatchConfig's entityMapper. Manager is wired in 3b.
+            return Optional.of(new Employee(dto.id(), dto.name(), jobTitleService.getOrCreate(dto.role()),
+                    dto.salary(), dto.email(), departmentService.getOrCreate(dto.department())));
 
         } catch (Exception e) {
             String errorMsg = e.getMessage();
