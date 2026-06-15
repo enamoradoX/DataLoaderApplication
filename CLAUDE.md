@@ -79,9 +79,14 @@ validation rules, same log format/severity, same notification flow). For each sk
   user's data didn't fully load
 - logs a structured line via a separate `auditLogger` (configured in `src/main/resources/logback-spring.xml` to
   write to `logs/skipped_records.log`): `PHASE: ... | RECORD ID: ... | ERROR: ...`
+- persists a `SkippedRecord` row (`entities/SkippedRecord.java`) **synchronously** via
+  `services/SkippedRecordService`, stamped with a `loadId` correlation id (batch: the `JobExecution` id, captured
+  in `EmployeeSkipListener.beforeStep`; legacy: a `UUID` per run). Writes are idempotent per `(loadId, recordId)`
+  for known ids (Batch chunk re-scans / multiple validation errors merge into one row) and use `REQUIRES_NEW` so
+  the audit row commits independently of a rolling-back load. This table backs the end-of-run digest + review page.
 - publishes a `SkipEvent` via the shared `services/SkipEventPublisher` to the Kafka topic
   `employee-skip-events-topic` (a `NewTopic` bean in `configurations/KafkaConfiguration.java`, 3 partitions, keyed
-  by record ID)
+  by record ID). Kafka is kept for potential other consumers; it no longer drives email.
 
 `models/SkipEvent.java` carries `phase, recordId, errorMessage, timestamp` plus a nullable
 `EmployeeRecordData data` (`models/EmployeeRecordData.java`: the 5 row columns as Strings) — populated when the
@@ -92,20 +97,30 @@ row was captured (validation/write skips, and parse skips that still split into 
   payload from the `EmployeeDto`), `onSkipInWrite` (DB failures, payload from the `Employee` entity).
 - **Legacy path** — `services/DataLoaderService.java` emits the same phases/format from its hand-rolled parser.
 
-### Skip-event consumer, email, and reprocess flow
+### Digest email + reprocess flow
 
-- `consumers/SkipEventConsumer.java` — `@KafkaListener` on `employee-skip-events-topic` (using the explicit
-  `consumerFactory`/`skipEventKafkaListenerContainerFactory` beans in `KafkaConfiguration`; `JacksonJsonDeserializer`
-  fixed to `SkipEvent` with `ignoreTypeHeaders()`). Delegates each event to the email service.
-- `services/EmailNotificationService.java` — sends a plain-text alert via `JavaMailSender`. When `data` is present
-  it includes the row values and a **reprocess link** (`app.notifications.email.reprocess-base-url`, defaults to
-  `http://localhost:8081/reprocess.html`) with the fields as query params. Gated by `app.notifications.email.enabled`;
-  send failures are logged, never rethrown. SMTP + addresses come from `MAIL_USERNAME`/`MAIL_APP_PASSWORD` env vars
-  (empty defaults so the context still loads when unset — e.g. tests).
-- `src/main/resources/static/reprocess.html` — a dependency-free edit page: prefills from the email link's query
-  params, POSTs the corrected record to `/api/reprocess`, shows the saved id or the validation errors.
-- `services/ReprocessService.java` — re-runs a single corrected record through the **same** shared `Validator`
-  against `EmployeeDto`, saves on success.
+The notification model is **one digest email per load run** (not per skip), driven by the persisted
+`SkippedRecord` table rather than by Kafka:
+
+- **End-of-run trigger** — `JobPerformanceListener.afterJob` (batch) and the end of
+  `DataLoaderService.loadLocalDataFile()` (legacy) query `SkippedRecordService.findByLoad(loadId)` and, if any,
+  call `EmailNotificationService.sendLoadDigest(...)`. (Synchronous: skip rows are committed via `REQUIRES_NEW`,
+  so they're visible by the end-of-run hook.)
+- `services/EmailNotificationService.java` — `sendLoadDigest(loadId, skips)` sends ONE plain-text email listing
+  each skipped record and a single link to the review page `{app.notifications.email.skips-base-url}/{loadId}`
+  (defaults to `http://localhost:4200/skips`). Gated by `app.notifications.email.enabled`; send failures are
+  logged, never rethrown. SMTP + addresses come from `MAIL_USERNAME`/`MAIL_APP_PASSWORD` env vars (empty defaults
+  so the context still loads when unset — e.g. tests).
+- `consumers/SkipEventConsumer.java` — `@KafkaListener` on `employee-skip-events-topic` (explicit
+  `consumerFactory`/`skipEventKafkaListenerContainerFactory` beans; `JacksonJsonDeserializer` fixed to `SkipEvent`
+  with `ignoreTypeHeaders()`). Now **log-only** — a sample hook for other services; it no longer sends email.
+- `services/ReprocessService.java` — re-runs a corrected record through the **same** shared `Validator` against
+  `EmployeeDto`, saves on success. `reprocess(...)` handles one record (`POST /api/reprocess`); `reprocessBatch(...)`
+  handles many and marks each saved row's `SkippedRecord` as `REPROCESSED` (`POST /api/skips/{loadId}/reprocess`).
+- Frontend (`frontend/`, Angular): route `/reprocess` is the single-record edit UI; route `/skips/:loadId` is the
+  per-load review page the digest links to — it fetches `GET /api/skips/{loadId}`, shows each pending skip as an
+  editable row, and bulk-submits to the batch endpoint, rendering per-row saved/error outcomes.
+  `src/main/resources/static/reprocess.html` is the older standalone version (superseded; not linked from email).
 
 ### REST API (`controllers/JobOperatorController.java`)
 
@@ -128,8 +143,18 @@ Base path `/api/reprocess`:
 
 - `POST /api/reprocess` — body is `EmployeeRecordData` (the 5 columns as JSON strings). Re-validates via
   `ReprocessService` and saves; returns **200** with `{success, savedId}` or **422** with `{success:false, errors}`.
-  Backs the `reprocess.html` page that the alert emails link to. (No auth — fine for local dev, would need
-  protection before any real deployment.)
+  Backs the Angular `/reprocess` edit page. (No auth — fine for local dev, would need protection before any real
+  deployment.)
+
+### REST API (`controllers/SkipsController.java`)
+
+Base path `/api/skips`, backs the per-load review page:
+
+- `GET /api/skips/{loadId}` — returns the still-`PENDING` `SkippedRecord`s for a load as `SkippedRecordView`
+  (skipId, recordId, phase, errorMessage, status, editable `data`).
+- `POST /api/skips/{loadId}/reprocess` — body is a list of `BatchReprocessItem` (`{skipId, data}`). Reprocesses
+  each via `ReprocessService.reprocessBatch`, marks saved rows `REPROCESSED`, returns **200** with a list of
+  `BatchReprocessResult` (`{skipId, success, savedId, errors}`) — partial success is normal.
 
 ### Data model
 

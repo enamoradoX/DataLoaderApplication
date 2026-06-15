@@ -4,6 +4,8 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
+import org.mytestproject.dataloader.models.BatchReprocessItem;
+import org.mytestproject.dataloader.models.BatchReprocessResult;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.models.EmployeeRecordData;
 import org.mytestproject.dataloader.models.ReprocessResult;
@@ -24,10 +26,30 @@ public class ReprocessService {
 
     private final EmployeeRepository employeeRepository;
     private final Validator validator;
+    private final SkippedRecordService skippedRecordService;
 
-    public ReprocessService(EmployeeRepository employeeRepository, Validator validator) {
+    public ReprocessService(EmployeeRepository employeeRepository, Validator validator,
+                            SkippedRecordService skippedRecordService) {
         this.employeeRepository = employeeRepository;
         this.validator = validator;
+        this.skippedRecordService = skippedRecordService;
+    }
+
+    /**
+     * Reprocesses many corrected rows at once (the "fix them all" action). Each row is validated and
+     * saved independently; a row that saves has its SkippedRecord marked REPROCESSED so it drops off
+     * the review page, while rows that still fail are returned with their errors so they stay editable.
+     */
+    public List<BatchReprocessResult> reprocessBatch(List<BatchReprocessItem> items) {
+        List<BatchReprocessResult> results = new ArrayList<>();
+        for (BatchReprocessItem item : items) {
+            ReprocessResult result = reprocess(item.data());
+            if (result.success()) {
+                skippedRecordService.markReprocessed(item.skipId());
+            }
+            results.add(new BatchReprocessResult(item.skipId(), result.success(), result.savedId(), result.errors()));
+        }
+        return results;
     }
 
     public ReprocessResult reprocess(EmployeeRecordData data) {

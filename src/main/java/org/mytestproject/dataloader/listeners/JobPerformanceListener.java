@@ -1,16 +1,29 @@
 package org.mytestproject.dataloader.listeners;
 
 import lombok.extern.slf4j.Slf4j;
+import org.mytestproject.dataloader.entities.SkippedRecord;
+import org.mytestproject.dataloader.services.EmailNotificationService;
+import org.mytestproject.dataloader.services.SkippedRecordService;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.listener.JobExecutionListener;
 import org.springframework.batch.core.step.StepExecution;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 
 @Component
 @Slf4j
 public class JobPerformanceListener implements JobExecutionListener {
+
+    private final SkippedRecordService skippedRecordService;
+    private final EmailNotificationService emailNotificationService;
+
+    public JobPerformanceListener(SkippedRecordService skippedRecordService,
+                                  EmailNotificationService emailNotificationService) {
+        this.skippedRecordService = skippedRecordService;
+        this.emailNotificationService = emailNotificationService;
+    }
 
     @Override
     public void beforeJob(JobExecution jobExecution) {
@@ -73,5 +86,14 @@ public class JobPerformanceListener implements JobExecutionListener {
                 totalProcessSkips,
                 totalWriteSkips
         );
+
+        // One digest email per run: the loadId is the JobExecution id stamped on each SkippedRecord
+        // (see EmployeeSkipListener.beforeStep). Skip writes use REQUIRES_NEW, so they're committed
+        // and visible here.
+        String loadId = String.valueOf(jobExecution.getId());
+        List<SkippedRecord> skips = skippedRecordService.findByLoad(loadId);
+        if (!skips.isEmpty()) {
+            emailNotificationService.sendLoadDigest(loadId, skips);
+        }
     }
 }

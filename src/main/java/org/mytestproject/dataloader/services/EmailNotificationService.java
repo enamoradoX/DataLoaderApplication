@@ -1,15 +1,13 @@
 package org.mytestproject.dataloader.services;
 
 import lombok.extern.slf4j.Slf4j;
-import org.mytestproject.dataloader.models.EmployeeRecordData;
-import org.mytestproject.dataloader.models.SkipEvent;
+import org.mytestproject.dataloader.entities.SkippedRecord;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.MailException;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -26,77 +24,52 @@ public class EmailNotificationService {
     @Value("${app.notifications.email.to}")
     private String to;
 
-    @Value("${app.notifications.email.reprocess-base-url:http://localhost:8081/reprocess.html}")
-    private String reprocessBaseUrl;
+    @Value("${app.notifications.email.skips-base-url:http://localhost:4200/skips}")
+    private String skipsBaseUrl;
 
     public EmailNotificationService(JavaMailSender mailSender) {
         this.mailSender = mailSender;
     }
 
     /**
-     * Sends a plain-text alert email describing a single skipped record. When the original row
-     * was captured, the email also shows its values and a link to the edit-and-reprocess page.
-     * Failures are logged but never rethrown, so a flaky mail server can't crash the consumer.
+     * Sends ONE digest email for a finished load that produced skips, listing each skipped record
+     * and a single link to the review-and-reprocess page for that load. Called from the end-of-run
+     * hooks (batch JobPerformanceListener.afterJob and the legacy DataLoaderService), not per skip.
+     * Failures are logged but never rethrown, so a flaky mail server can't fail the load.
      */
-    public void sendSkipAlert(SkipEvent event) {
+    public void sendLoadDigest(String loadId, List<SkippedRecord> skips) {
         if (!enabled) {
-            log.debug("Email notifications disabled; skipping alert for record {}", event.recordId());
+            log.debug("Email notifications disabled; skipping digest for load {}", loadId);
+            return;
+        }
+        if (skips == null || skips.isEmpty()) {
             return;
         }
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(from);
         message.setTo(to);
-        message.setSubject(String.format("[DataLoader] Record skipped during %s (ID: %s)",
-                event.phase(), event.recordId()));
-        message.setText(buildBody(event));
+        message.setSubject(String.format("[DataLoader] %d record(s) skipped in load %s", skips.size(), loadId));
+        message.setText(buildDigestBody(loadId, skips));
 
         try {
             mailSender.send(message);
-            log.info("Sent skip-alert email for record {} (phase {})", event.recordId(), event.phase());
+            log.info("Sent skip digest email for load {} ({} record(s))", loadId, skips.size());
         } catch (MailException e) {
-            log.error("Failed to send skip-alert email for record {}: {}", event.recordId(), e.getMessage());
+            log.error("Failed to send skip digest email for load {}: {}", loadId, e.getMessage());
         }
     }
 
-    private String buildBody(SkipEvent event) {
+    private String buildDigestBody(String loadId, List<SkippedRecord> skips) {
         StringBuilder body = new StringBuilder(String.format(
-                "A record was skipped during the data load.%n%n" +
-                "Phase     : %s%n" +
-                "Record ID : %s%n" +
-                "Error     : %s%n" +
-                "Timestamp : %s%n",
-                event.phase(), event.recordId(), event.errorMessage(), event.timestamp()));
+                "Load %s finished with %d skipped record(s):%n%n", loadId, skips.size()));
 
-        EmployeeRecordData data = event.data();
-        if (data != null) {
-            body.append(String.format(
-                    "%nRecord values:%n" +
-                    "  id     : %s%n" +
-                    "  name   : %s%n" +
-                    "  email  : %s%n" +
-                    "  role   : %s%n" +
-                    "  salary : %s%n",
-                    data.id(), data.name(), data.email(), data.role(), data.salary()));
-            body.append(String.format("%nFix and reprocess this record:%n%s%n", buildReprocessLink(data)));
-        } else {
-            body.append(String.format(
-                    "%nThe original row could not be captured for this skip, so it cannot be " +
-                    "reprocessed from this email. Check %s and the source file.%n", "logs/skipped_records.log"));
+        for (SkippedRecord skip : skips) {
+            body.append(String.format("  - [%s] %s: %s%n",
+                    skip.getRecordId(), skip.getPhase(), skip.getErrorMessage()));
         }
+
+        body.append(String.format("%nReview and reprocess them all here:%n%s/%s%n", skipsBaseUrl, loadId));
         return body.toString();
-    }
-
-    private String buildReprocessLink(EmployeeRecordData data) {
-        return reprocessBaseUrl
-                + "?id=" + enc(data.id())
-                + "&name=" + enc(data.name())
-                + "&email=" + enc(data.email())
-                + "&role=" + enc(data.role())
-                + "&salary=" + enc(data.salary());
-    }
-
-    private static String enc(String value) {
-        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
     }
 }
