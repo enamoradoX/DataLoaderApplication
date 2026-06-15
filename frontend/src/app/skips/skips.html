@@ -1,0 +1,49 @@
+<h1>Skipped Records — Load {{ loadId }}</h1>
+
+@if (loading()) {
+  <p>Loading…</p>
+} @else if (loadError(); as err) {
+  <p class="err">{{ err }}</p>
+} @else if (views().length === 0) {
+  <p class="ok">No pending skipped records for this load.</p>
+} @else {
+  <p>Correct the values and reprocess. Saved rows show their new id; press Refresh to drop them from the list.</p>
+
+  <form [formGroup]="formGroup" (ngSubmit)="submit()">
+    <div formArrayName="rows">
+      @for (group of rows.controls; track group.value.skipId; let i = $index) {
+        <div class="card" [formGroupName]="i">
+          <div class="meta">
+            <span class="badge">{{ views()[i].phase }}</span>
+            <span class="rid">record {{ views()[i].recordId }}</span>
+          </div>
+          <p class="err-text">{{ views()[i].errorMessage }}</p>
+
+          <div class="fields">
+            <label>ID <input formControlName="id" autocomplete="off"></label>
+            <label>Name <input formControlName="name" autocomplete="off"></label>
+            <label>Email <input formControlName="email" autocomplete="off"></label>
+            <label>Department <input formControlName="department" autocomplete="off"></label>
+            <label>Role <input formControlName="role" autocomplete="off"></label>
+            <label>Salary <input formControlName="salary" autocomplete="off"></label>
+          </div>
+
+          @if (resultFor(group.value.skipId); as r) {
+            @if (r.success) {
+              <div class="result ok">Saved as employee id {{ r.savedId }}.</div>
+            } @else {
+              <div class="result err">
+                <ul>@for (e of r.errors; track e) { <li>{{ e }}</li> }</ul>
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
+
+    <div class="actions">
+      <button type="submit" [disabled]="submitting()">Reprocess All</button>
+      <button type="button" (click)="refresh()" [disabled]="submitting()">Refresh</button>
+    </div>
+  </form>
+}
