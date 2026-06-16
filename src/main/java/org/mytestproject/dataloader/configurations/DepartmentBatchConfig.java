@@ -2,6 +2,7 @@ package org.mytestproject.dataloader.configurations;
 
 import org.mytestproject.dataloader.entities.Department;
 import org.mytestproject.dataloader.repositories.DepartmentRepository;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
@@ -28,9 +29,6 @@ import org.springframework.transaction.PlatformTransactionManager;
 @Configuration
 public class DepartmentBatchConfig {
 
-    @Value("classpath:departments.txt")
-    private Resource departmentsFile;
-
     private final DepartmentRepository departmentRepository;
 
     public DepartmentBatchConfig(DepartmentRepository departmentRepository) {
@@ -38,14 +36,17 @@ public class DepartmentBatchConfig {
     }
 
     /**
-     * The file has one department name per line, so the whole line IS the value:
-     * PassThroughLineMapper hands each raw line to the processor as a String.
+     * @StepScope so the file comes from the 'inputFile' job parameter (set by the upload endpoint),
+     * falling back to the bundled classpath file when absent. The file has one department name per
+     * line, so the whole line IS the value: PassThroughLineMapper hands each raw line through as a String.
      */
     @Bean
-    public FlatFileItemReader<String> departmentReader() {
+    @StepScope
+    public FlatFileItemReader<String> departmentReader(
+            @Value("#{jobParameters['inputFile'] ?: 'classpath:departments.txt'}") Resource inputFile) {
         return new FlatFileItemReaderBuilder<String>()
                 .name("departmentReader")
-                .resource(departmentsFile)
+                .resource(inputFile)
                 .linesToSkip(1) // skip the "name" header row
                 .lineMapper(new PassThroughLineMapper())
                 .build();
@@ -63,11 +64,12 @@ public class DepartmentBatchConfig {
 
     @Bean
     public Step departmentLoadingStep(JobRepository jobRepository,
-                                      PlatformTransactionManager transactionManager) {
+                                      PlatformTransactionManager transactionManager,
+                                      FlatFileItemReader<String> departmentReader) {
         return new StepBuilder("departmentLoadingStep", jobRepository)
                 .<String, Department>chunk(500) // read/map/write 500 at a time, commit per chunk
                 .transactionManager(transactionManager)
-                .reader(departmentReader())
+                .reader(departmentReader) // @StepScope proxy injected; resolves inputFile per run
                 .processor(departmentProcessor())
                 .writer(chunk -> departmentRepository.saveAll(chunk.getItems()))
                 .faultTolerant()

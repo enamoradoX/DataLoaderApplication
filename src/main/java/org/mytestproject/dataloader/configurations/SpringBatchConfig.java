@@ -16,6 +16,7 @@ import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.Step;
+import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.batch.infrastructure.item.file.FlatFileItemReader;
@@ -38,9 +39,6 @@ import java.util.Set;
 
 @Configuration
 public class SpringBatchConfig {
-
-    @Value("classpath:data.txt")
-    private Resource dataFile;
 
     private final EmployeeRepository employeeRepository;
 
@@ -118,11 +116,18 @@ public class SpringBatchConfig {
         return compositeProcessor;
     }
 
+    /**
+     * @StepScope so the resource is resolved per run from the 'inputFile' job parameter (set by
+     * the upload endpoint). Falls back to the bundled classpath file when the parameter is absent,
+     * so the plain /api/batch/start endpoints still work.
+     */
     @Bean
-    public FlatFileItemReader<EmployeeDto> reader() {
+    @StepScope
+    public FlatFileItemReader<EmployeeDto> reader(
+            @Value("#{jobParameters['inputFile'] ?: 'classpath:data.txt'}") Resource inputFile) {
         return new FlatFileItemReaderBuilder<EmployeeDto>()
                 .name("employeeReader")
-                .resource(dataFile)
+                .resource(inputFile)
                 .linesToSkip(1) // Skip header row
                 .delimited()
                 .names("id","employeeName","email","department","role","managerId","salary")
@@ -157,12 +162,13 @@ public class SpringBatchConfig {
 
     @Bean
     public Step csvFileLoadingStep(JobRepository jobRepository,
-                                   PlatformTransactionManager transactionManager) throws Exception { // 1. Inject the writer bean here
+                                   PlatformTransactionManager transactionManager,
+                                   FlatFileItemReader<EmployeeDto> reader) throws Exception {
 
         return new StepBuilder("csvFileLoadingStep", jobRepository)
                 .<EmployeeDto, Employee>chunk(500)
                 .transactionManager(transactionManager)
-                .reader(reader())
+                .reader(reader) // @StepScope proxy injected; resolves inputFile per run
                 .processor(processor(jsrValidator(), entityMapper()))
                 .writer(chunk -> {
                     employeeRepository.saveAll(chunk.getItems());

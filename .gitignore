@@ -7,6 +7,9 @@ target/
 ### Runtime logs ###
 logs/
 
+### Uploaded import files ###
+imports/
+
 ### Claude Code (personal/machine-specific overrides) ###
 .claude/settings.local.json
 
