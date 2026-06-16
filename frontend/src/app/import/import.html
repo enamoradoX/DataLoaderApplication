@@ -1,0 +1,34 @@
+<h1>Import Data</h1>
+<p>Choose what the file is, then drag it onto the box (or browse) and load it.</p>
+
+<div class="type-row">
+  <span>Load as:</span>
+  <button type="button" [class.active]="type() === 'departments'" (click)="setType('departments')">Departments</button>
+  <button type="button" [class.active]="type() === 'employees'" (click)="setType('employees')">Employees</button>
+</div>
+
+<div class="dropzone" [class.dragging]="dragging()"
+     (dragover)="onDragOver($event)" (dragleave)="onDragLeave($event)" (drop)="onDrop($event)">
+  @if (file(); as f) {
+    <p>Selected: <strong>{{ f.name }}</strong> ({{ f.size }} bytes)</p>
+  } @else {
+    <p>Drop a file here</p>
+  }
+  <label class="browse">Browse…<input type="file" (change)="onPick($event)" hidden></label>
+</div>
+
+<button class="upload-btn" type="button" [disabled]="!file() || uploading()" (click)="upload()">
+  {{ uploading() ? 'Uploading…' : 'Upload & Load' }}
+</button>
+
+@if (result(); as r) {
+  <div class="result ok">
+    <p>{{ r.message }}</p>
+    <p>Job: <strong>{{ r.jobName }}</strong> · Execution: <strong>{{ r.executionId }}</strong></p>
+    <button type="button" (click)="checkStatus()">Check status</button>
+    @if (summary(); as s) { <pre>{{ s }}</pre> }
+  </div>
+}
+@if (error(); as e) {
+  <div class="result err">{{ e }}</div>
+}
