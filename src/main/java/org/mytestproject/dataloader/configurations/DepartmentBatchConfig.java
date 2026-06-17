@@ -24,6 +24,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
+import java.util.HashSet;
 import java.util.Set;
 
 /**
@@ -75,7 +76,10 @@ public class DepartmentBatchConfig {
      * from loading as departments.
      */
     @Bean
+    @StepScope
     public ItemProcessor<String, Department> departmentProcessor() {
+        // @StepScope -> a fresh set per run (single-threaded step, so no synchronization needed).
+        Set<String> seenThisRun = new HashSet<>();
         return raw -> {
             if (raw == null || raw.isBlank()) {
                 return null;
@@ -85,19 +89,28 @@ public class DepartmentBatchConfig {
             if (!violations.isEmpty()) {
                 throw new ConstraintViolationException(violations);
             }
-            return new Department(dto.name());
+            String name = dto.name();
+            // Idempotent find-or-skip: drop names already loaded — repeated in this file (seenThisRun)
+            // or already in the DB (findByName). This is the real fix for the duplicate case: skipping
+            // on DataIntegrityViolation can't recover with JPA (the chunk tx goes rollback-only and the
+            // whole job fails), so we make sure a duplicate insert is never attempted.
+            if (!seenThisRun.add(name) || departmentRepository.findByName(name).isPresent()) {
+                return null;
+            }
+            return new Department(name);
         };
     }
 
     @Bean
     public Step departmentLoadingStep(JobRepository jobRepository,
                                       PlatformTransactionManager transactionManager,
-                                      FlatFileItemReader<String> departmentReader) {
+                                      FlatFileItemReader<String> departmentReader,
+                                      ItemProcessor<String, Department> departmentProcessor) {
         return new StepBuilder("departmentLoadingStep", jobRepository)
                 .<String, Department>chunk(500) // read/map/write 500 at a time, commit per chunk
                 .transactionManager(transactionManager)
                 .reader(departmentReader) // @StepScope proxy injected; resolves inputFile per run
-                .processor(departmentProcessor())
+                .processor(departmentProcessor) // @StepScope proxy injected; dedupes per run
                 .writer(chunk -> departmentRepository.saveAll(chunk.getItems()))
                 .faultTolerant()
                 // Skip rows that fail validation (wrong-shaped data) and duplicate names (unique
