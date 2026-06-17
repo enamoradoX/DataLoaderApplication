@@ -6,6 +6,7 @@ package org.mytestproject.dataloader.models;
  */
 public record SkippedRecordView(
         Long skipId,
+        String targetType,
         String recordId,
         String phase,
         String errorMessage,

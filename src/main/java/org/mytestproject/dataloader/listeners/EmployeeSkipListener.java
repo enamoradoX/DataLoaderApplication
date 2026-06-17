@@ -3,6 +3,7 @@ package org.mytestproject.dataloader.listeners;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
+import org.mytestproject.dataloader.entities.SkipTargetType;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.models.EmployeeRecordData;
 import org.mytestproject.dataloader.services.SkipEventPublisher;
@@ -44,7 +45,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
 
         // No item is available on a read failure, so there is no row payload to carry.
         skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
-        skippedRecordService.record(currentLoadId(), "READ", "UNKNOWN", errorMsg, null);
+        skippedRecordService.record(currentLoadId(), SkipTargetType.EMPLOYEE, "READ", "UNKNOWN", errorMsg, null);
     }
 
     @Override
@@ -69,7 +70,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
                 auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", recordId, errorMsg);
 
                 skipEventPublisher.publish("PROCESS_VALIDATION", recordId, errorMsg, data);
-                skippedRecordService.record(loadId, "PROCESS_VALIDATION", recordId, errorMsg, data);
+                skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "PROCESS_VALIDATION", recordId, errorMsg, data);
             });
         } else {
             String errorMsg = t.getMessage();
@@ -77,7 +78,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
             auditLogger.info("PHASE: PROCESS | RECORD ID: {} | ERROR: {}", recordId, errorMsg);
 
             skipEventPublisher.publish("PROCESS", recordId, errorMsg, data);
-            skippedRecordService.record(loadId, "PROCESS", recordId, errorMsg, data);
+            skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "PROCESS", recordId, errorMsg, data);
         }
     }
 
@@ -91,7 +92,7 @@ public class EmployeeSkipListener implements SkipListener<EmployeeDto, Employee>
 
         EmployeeRecordData data = toRecordData(item);
         skipEventPublisher.publish("WRITE_DATABASE", name, errorMsg, data);
-        skippedRecordService.record(currentLoadId(), "WRITE_DATABASE", name, errorMsg, data);
+        skippedRecordService.record(currentLoadId(), SkipTargetType.EMPLOYEE, "WRITE_DATABASE", name, errorMsg, data);
     }
 
     private EmployeeRecordData toRecordData(EmployeeDto item) {

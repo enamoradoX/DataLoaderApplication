@@ -1,6 +1,12 @@
 package org.mytestproject.dataloader.configurations;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
+import jakarta.validation.Validator;
 import org.mytestproject.dataloader.entities.Department;
+import org.mytestproject.dataloader.listeners.DepartmentSkipListener;
+import org.mytestproject.dataloader.listeners.SkipDigestJobListener;
+import org.mytestproject.dataloader.models.DepartmentDto;
 import org.mytestproject.dataloader.repositories.DepartmentRepository;
 import org.springframework.batch.core.configuration.annotation.StepScope;
 import org.springframework.batch.core.job.Job;
@@ -18,6 +24,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
+import java.util.Set;
 
 /**
  * A standalone single-table loader for the Department lookup table — the simplest shape of a
@@ -30,9 +37,17 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class DepartmentBatchConfig {
 
     private final DepartmentRepository departmentRepository;
+    private final Validator validator;
+    private final DepartmentSkipListener departmentSkipListener;
+    private final SkipDigestJobListener skipDigestJobListener;
 
-    public DepartmentBatchConfig(DepartmentRepository departmentRepository) {
+    public DepartmentBatchConfig(DepartmentRepository departmentRepository, Validator validator,
+                                 DepartmentSkipListener departmentSkipListener,
+                                 SkipDigestJobListener skipDigestJobListener) {
         this.departmentRepository = departmentRepository;
+        this.validator = validator;
+        this.departmentSkipListener = departmentSkipListener;
+        this.skipDigestJobListener = skipDigestJobListener;
     }
 
     /**
@@ -53,13 +68,25 @@ public class DepartmentBatchConfig {
     }
 
     /**
-     * Turns a raw name into a Department, trimming whitespace. Returning null filters the item
-     * out of the chunk (Spring Batch treats a null processor result as "skip this item"), which
-     * we use to drop blank lines.
+     * Validates each name with the same shared Validator the employee loader uses (against
+     * DepartmentDto), then maps to a Department. Blank lines are filtered (return null); rows that
+     * fail validation throw ConstraintViolationException so the step skips them (and the
+     * DepartmentSkipListener records them). This is what stops a wrong file (e.g. customer data)
+     * from loading as departments.
      */
     @Bean
     public ItemProcessor<String, Department> departmentProcessor() {
-        return name -> (name == null || name.isBlank()) ? null : new Department(name.trim());
+        return raw -> {
+            if (raw == null || raw.isBlank()) {
+                return null;
+            }
+            DepartmentDto dto = new DepartmentDto(raw.trim());
+            Set<ConstraintViolation<DepartmentDto>> violations = validator.validate(dto);
+            if (!violations.isEmpty()) {
+                throw new ConstraintViolationException(violations);
+            }
+            return new Department(dto.name());
+        };
     }
 
     @Bean
@@ -73,10 +100,12 @@ public class DepartmentBatchConfig {
                 .processor(departmentProcessor())
                 .writer(chunk -> departmentRepository.saveAll(chunk.getItems()))
                 .faultTolerant()
-                // Department.name is unique, so a name already in the DB (or duplicated in the
-                // file) throws on save. Skip those instead of failing the whole load.
+                // Skip rows that fail validation (wrong-shaped data) and duplicate names (unique
+                // constraint) instead of failing the whole load; the listener records each skip.
+                .skip(ConstraintViolationException.class)
                 .skip(DataIntegrityViolationException.class)
                 .skipLimit(1000)
+                .listener(departmentSkipListener)
                 .build();
     }
 
@@ -84,6 +113,7 @@ public class DepartmentBatchConfig {
     public Job departmentLoaderJob(JobRepository jobRepository, Step departmentLoadingStep) {
         return new JobBuilder("departmentLoaderJob", jobRepository)
                 .start(departmentLoadingStep)
+                .listener(skipDigestJobListener) // one digest email of any skipped department rows
                 .build();
     }
 }

@@ -31,6 +31,11 @@ public class ImportController {
             "departments", "departmentLoaderJob",
             "employees", "employeeLoaderJob");
 
+    // Expected header line per type — used to reject a wrong file (e.g. customer data) up front.
+    private static final Map<String, String> EXPECTED_HEADER = Map.of(
+            "departments", "name",
+            "employees", "id,employeeName,email,department,role,managerId,salary");
+
     private final JobOperator jobOperator;
     private final Map<String, Job> jobs;
 
@@ -62,6 +67,19 @@ public class ImportController {
         Path target = dir.resolve(storedName);
         try (InputStream in = file.getInputStream()) {
             Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        // Reject a wrong-format file up front: the first line must match the expected header.
+        String header;
+        try (var reader = Files.newBufferedReader(target)) {
+            header = reader.readLine();
+        }
+        String expected = EXPECTED_HEADER.get(jobName == null ? "" : type);
+        if (expected != null && (header == null || !header.trim().equalsIgnoreCase(expected))) {
+            Files.deleteIfExists(target); // don't keep / load a file that isn't this type
+            return ResponseEntity.badRequest().body(new ImportResponse(type, jobName, null, null,
+                    "This doesn't look like a " + type + " file. Expected header '" + expected
+                            + "' but got '" + (header == null ? "" : header.trim()) + "'."));
         }
 
         // Start the matching job, pointing its @StepScope reader at the uploaded file.

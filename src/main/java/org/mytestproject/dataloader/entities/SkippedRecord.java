@@ -27,6 +27,10 @@ public class SkippedRecord {
     /** Correlation id of the load run (batch JobExecution id, or a UUID for the legacy loader). */
     private String loadId;
 
+    /** Which load this skip came from — EMPLOYEE or DEPARTMENT — so reprocess routes correctly. */
+    @Enumerated(EnumType.STRING)
+    private SkipTargetType targetType;
+
     /** READ / PROCESS_VALIDATION / PROCESS / WRITE_DATABASE. */
     private String phase;
 

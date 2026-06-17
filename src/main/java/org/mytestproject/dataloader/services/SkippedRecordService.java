@@ -2,6 +2,7 @@ package org.mytestproject.dataloader.services;
 
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.SkipStatus;
+import org.mytestproject.dataloader.entities.SkipTargetType;
 import org.mytestproject.dataloader.entities.SkippedRecord;
 import org.mytestproject.dataloader.models.EmployeeRecordData;
 import org.mytestproject.dataloader.repositories.SkippedRecordRepository;
@@ -36,7 +37,8 @@ public class SkippedRecordService {
      * (which may roll back/retry around the skip).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void record(String loadId, String phase, String recordId, String errorMessage, EmployeeRecordData data) {
+    public void record(String loadId, SkipTargetType targetType, String phase, String recordId,
+                       String errorMessage, EmployeeRecordData data) {
         boolean hasKnownId = recordId != null && !recordId.isBlank() && !"UNKNOWN".equals(recordId);
 
         if (hasKnownId) {
@@ -46,7 +48,7 @@ public class SkippedRecordService {
                 if (existing.getErrorMessage() == null || !existing.getErrorMessage().contains(errorMessage)) {
                     existing.setErrorMessage(appendError(existing.getErrorMessage(), errorMessage));
                 }
-                if (existing.getRawName() == null && data != null) {
+                if (existing.getRawName() == null && existing.getRawDepartment() == null && data != null) {
                     applyData(existing, data);
                 }
                 repository.save(existing);
@@ -56,6 +58,7 @@ public class SkippedRecordService {
 
         SkippedRecord record = new SkippedRecord();
         record.setLoadId(loadId);
+        record.setTargetType(targetType);
         record.setPhase(phase);
         record.setRecordId(recordId);
         record.setErrorMessage(errorMessage);
@@ -75,6 +78,12 @@ public class SkippedRecordService {
     @Transactional(readOnly = true)
     public List<SkippedRecord> findPendingByLoad(String loadId) {
         return repository.findByLoadIdAndStatus(loadId, SkipStatus.PENDING);
+    }
+
+    /** Loads a single skip by id (used by reprocess to read its targetType). */
+    @Transactional(readOnly = true)
+    public Optional<SkippedRecord> findById(Long skipId) {
+        return repository.findById(skipId);
     }
 
     /** Marks a skip as reprocessed so it drops off the review page. No-op if the id is unknown. */

@@ -4,6 +4,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
+import org.mytestproject.dataloader.entities.SkipTargetType;
 import org.mytestproject.dataloader.entities.SkippedRecord;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.models.EmployeeRecordData;
@@ -135,7 +136,7 @@ public class DataLoaderService {
                         employee.getJobTitle() != null ? employee.getJobTitle().getTitle() : null,
                         Objects.toString(employee.getSalary(), null));
                 skipEventPublisher.publish("WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
-                skippedRecordService.record(loadId, "WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
+                skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "WRITE_DATABASE", employee.getEmployeeName(), errorMsg, data);
             }
 
             batch.clear(); // Still clear memory to prevent memory leaks
@@ -157,7 +158,7 @@ public class DataLoaderService {
                 logger.error("Skipping line: {}. Line: [{}]", errorMsg, line);
                 auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
                 skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
-                skippedRecordService.record(loadId, "READ", "UNKNOWN", errorMsg, null);
+                skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "READ", "UNKNOWN", errorMsg, null);
                 return Optional.empty();
             }
 
@@ -183,7 +184,7 @@ public class DataLoaderService {
                 // The columns split cleanly even though a number didn't parse, so carry the raw row.
                 EmployeeRecordData data = new EmployeeRecordData(idStr, name, email, department, role, salaryStr);
                 skipEventPublisher.publish("READ", "UNKNOWN", errorMsg, data);
-                skippedRecordService.record(loadId, "READ", "UNKNOWN", errorMsg, data);
+                skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "READ", "UNKNOWN", errorMsg, data);
                 return Optional.empty();
             }
 
@@ -198,7 +199,7 @@ public class DataLoaderService {
                     logger.error("Skipping line [ID: {}]: {}", id, errorMsg);
                     auditLogger.info("PHASE: PROCESS_VALIDATION | RECORD ID: {} | ERROR: {}", id, errorMsg);
                     skipEventPublisher.publish("PROCESS_VALIDATION", String.valueOf(id), errorMsg, data);
-                    skippedRecordService.record(loadId, "PROCESS_VALIDATION", String.valueOf(id), errorMsg, data);
+                    skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "PROCESS_VALIDATION", String.valueOf(id), errorMsg, data);
                 }
                 return Optional.empty();
             }
@@ -213,7 +214,7 @@ public class DataLoaderService {
             logger.error("Skipping line: Unexpected parsing error: {}. Line: [{}]", errorMsg, line);
             auditLogger.info("PHASE: READ | RECORD ID: UNKNOWN | ERROR: {}", errorMsg);
             skipEventPublisher.publish("READ", "UNKNOWN", errorMsg);
-            skippedRecordService.record(loadId, "READ", "UNKNOWN", errorMsg, null);
+            skippedRecordService.record(loadId, SkipTargetType.EMPLOYEE, "READ", "UNKNOWN", errorMsg, null);
             return Optional.empty();
         }
     }

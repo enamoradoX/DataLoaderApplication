@@ -4,8 +4,11 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import lombok.extern.slf4j.Slf4j;
 import org.mytestproject.dataloader.entities.Employee;
+import org.mytestproject.dataloader.entities.SkipTargetType;
+import org.mytestproject.dataloader.entities.SkippedRecord;
 import org.mytestproject.dataloader.models.BatchReprocessItem;
 import org.mytestproject.dataloader.models.BatchReprocessResult;
+import org.mytestproject.dataloader.models.DepartmentDto;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.models.EmployeeRecordData;
 import org.mytestproject.dataloader.models.ReprocessResult;
@@ -48,13 +51,33 @@ public class ReprocessService {
     public List<BatchReprocessResult> reprocessBatch(List<BatchReprocessItem> items) {
         List<BatchReprocessResult> results = new ArrayList<>();
         for (BatchReprocessItem item : items) {
-            ReprocessResult result = reprocess(item.data());
+            // Route by what the skip was for, so a department skip isn't reprocessed as an employee.
+            SkipTargetType targetType = skippedRecordService.findById(item.skipId())
+                    .map(SkippedRecord::getTargetType)
+                    .orElse(SkipTargetType.EMPLOYEE);
+            ReprocessResult result = (targetType == SkipTargetType.DEPARTMENT)
+                    ? reprocessDepartment(item.data())
+                    : reprocess(item.data());
             if (result.success()) {
                 skippedRecordService.markReprocessed(item.skipId());
             }
             results.add(new BatchReprocessResult(item.skipId(), result.success(), result.savedId(), result.errors()));
         }
         return results;
+    }
+
+    /** Reprocess a corrected department row: validate the name and save it (find-or-create). */
+    private ReprocessResult reprocessDepartment(EmployeeRecordData data) {
+        DepartmentDto dto = new DepartmentDto(safeTrim(data.department()));
+        Set<ConstraintViolation<DepartmentDto>> violations = validator.validate(dto);
+        if (!violations.isEmpty()) {
+            List<String> errors = new ArrayList<>();
+            for (ConstraintViolation<DepartmentDto> violation : violations) {
+                errors.add(String.format("Field '%s' %s", violation.getPropertyPath(), violation.getMessage()));
+            }
+            return ReprocessResult.rejected(errors);
+        }
+        return ReprocessResult.saved(departmentService.getOrCreate(dto.name()).getId());
     }
 
     public ReprocessResult reprocess(EmployeeRecordData data) {

@@ -42,7 +42,9 @@ public class SkipsController {
                 record.getRawId(), record.getRawName(), record.getRawEmail(),
                 record.getRawDepartment(), record.getRawRole(), record.getRawSalary());
         return new SkippedRecordView(
-                record.getId(), record.getRecordId(), record.getPhase(),
+                record.getId(),
+                record.getTargetType() != null ? record.getTargetType().name() : null,
+                record.getRecordId(), record.getPhase(),
                 record.getErrorMessage(), record.getStatus().name(), data);
     }
 }

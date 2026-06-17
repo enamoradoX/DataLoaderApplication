@@ -6,6 +6,7 @@ import jakarta.validation.Validator;
 import org.mytestproject.dataloader.entities.Employee;
 import org.mytestproject.dataloader.listeners.EmployeeSkipListener;
 import org.mytestproject.dataloader.listeners.JobPerformanceListener;
+import org.mytestproject.dataloader.listeners.SkipDigestJobListener;
 import org.mytestproject.dataloader.models.EmployeeDto;
 import org.mytestproject.dataloader.repositories.EmployeeRepository;
 import org.mytestproject.dataloader.services.DepartmentService;
@@ -54,10 +55,12 @@ public class SpringBatchConfig {
 
     private final ManagerWiringService managerWiringService;
 
+    private final SkipDigestJobListener skipDigestJobListener;
+
     public SpringBatchConfig(EmployeeRepository employeeRepository, EmployeeSkipListener employeeSkipListener,
                               JobPerformanceListener jobPerformanceListener, Validator validator,
                               DepartmentService departmentService, JobTitleService jobTitleService,
-                              ManagerWiringService managerWiringService) {
+                              ManagerWiringService managerWiringService, SkipDigestJobListener skipDigestJobListener) {
         this.employeeRepository = employeeRepository;
         this.employeeSkipListener = employeeSkipListener;
         this.jobPerformanceListener = jobPerformanceListener;
@@ -65,6 +68,7 @@ public class SpringBatchConfig {
         this.departmentService = departmentService;
         this.jobTitleService = jobTitleService;
         this.managerWiringService = managerWiringService;
+        this.skipDigestJobListener = skipDigestJobListener;
     }
 
     @Bean
@@ -203,6 +207,7 @@ public class SpringBatchConfig {
                 .start(csvFileLoadingStep)   // pass 1: load employees (+ Department/JobTitle FKs)
                 .next(managerWiringStep)      // pass 2: resolve manager self-references
                 .listener(jobPerformanceListener)
+                .listener(skipDigestJobListener)
                 .build();
     }
 }
