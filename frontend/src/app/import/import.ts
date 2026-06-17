@@ -1,6 +1,6 @@
 import { Component, inject, signal } from '@angular/core';
 import { ImportService } from './import.service';
-import { ImportResponse } from './import.model';
+import { ImportResponse, JobSummary } from './import.model';
 
 type ImportType = 'departments' | 'employees';
 
@@ -19,7 +19,7 @@ export class Import {
   protected readonly uploading = signal(false);
   protected readonly result = signal<ImportResponse | null>(null);
   protected readonly error = signal<string | null>(null);
-  protected readonly summary = signal<string | null>(null);
+  protected readonly summary = signal<JobSummary | null>(null);
 
   protected setType(t: ImportType): void {
     this.type.set(t);
@@ -73,14 +73,29 @@ export class Import {
     });
   }
 
+  /** Severity for the status box: green (clean), yellow (loaded but with skips), red (failed). */
+  protected statusClass(): string {
+    const s = this.summary();
+    if (!s) {
+      return '';
+    }
+    if (s.status === 'COMPLETED') {
+      return s.rowsSkipped > 0 ? 'warn' : 'ok';
+    }
+    if (s.status === 'STARTING' || s.status === 'STARTED') {
+      return 'info';
+    }
+    return 'err';
+  }
+
   protected checkStatus(): void {
     const id = this.result()?.executionId;
     if (id == null) {
       return;
     }
     this.service.getSummary(id).subscribe({
-      next: (text) => this.summary.set(text),
-      error: (err) => this.summary.set('Failed to fetch status: ' + (err?.message ?? 'unknown')),
+      next: (s) => this.summary.set(s),
+      error: (err) => this.error.set('Failed to fetch status: ' + (err?.message ?? 'unknown')),
     });
   }
 }

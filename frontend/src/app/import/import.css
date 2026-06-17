@@ -53,3 +53,11 @@ h1 { font-size: 1.3rem; }
 .result.err { background: #fdecea; border: 1px solid #d93025; }
 .result button { margin-top: 0.4rem; padding: 0.35rem 0.8rem; border: 1px solid #bbb; border-radius: 4px; background: #fff; cursor: pointer; }
 .result pre { margin-top: 0.6rem; white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; }
+
+/* Status box, color-coded by outcome: green = clean, yellow = loaded with skips, red = failed. */
+.status { margin-top: 0.75rem; padding: 0.6rem 0.85rem; border-radius: 4px; border: 1px solid #ddd; }
+.status p { margin: 0.2rem 0; }
+.status.ok { background: #e7f6ec; border-color: #34a853; }
+.status.warn { background: #fff8e1; border-color: #e0a800; }
+.status.err { background: #fdecea; border-color: #d93025; }
+.status.info { background: #eef2ff; border-color: #c7d2fe; }

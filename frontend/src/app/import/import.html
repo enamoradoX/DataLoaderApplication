@@ -26,7 +26,16 @@
     <p>{{ r.message }}</p>
     <p>Job: <strong>{{ r.jobName }}</strong> · Execution: <strong>{{ r.executionId }}</strong></p>
     <button type="button" (click)="checkStatus()">Check status</button>
-    @if (summary(); as s) { <pre>{{ s }}</pre> }
+    @if (summary(); as s) {
+      <div class="status" [class.ok]="statusClass() === 'ok'"
+           [class.warn]="statusClass() === 'warn'"
+           [class.err]="statusClass() === 'err'"
+           [class.info]="statusClass() === 'info'">
+        <p>Status: <strong>{{ s.status }}</strong></p>
+        <p>{{ s.message }}</p>
+        <p>Read: {{ s.rowsRead }} · Saved: {{ s.rowsWritten }} · Skipped: {{ s.rowsSkipped }}</p>
+      </div>
+    }
   </div>
 }
 @if (error(); as e) {

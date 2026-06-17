@@ -1,17 +1,22 @@
 package org.mytestproject.dataloader.controllers;
 
+import lombok.extern.slf4j.Slf4j;
+import org.mytestproject.dataloader.models.JobSummary;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.parameters.JobParameters;
 import org.springframework.batch.core.job.parameters.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobOperator;
 import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.StepExecution;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController()
 @RequestMapping("/api/batch")
+@Slf4j
 public class JobOperatorController {
 
     private final JobOperator jobOperator;
@@ -79,8 +84,36 @@ public class JobOperatorController {
     }
 
     @GetMapping("/summary/{executionId}")
-    public String getJobSummary(@PathVariable Long executionId) {
-        JobExecution jobExecution = jobRepository.getJobExecution(executionId);
-        return (jobExecution != null) ? jobExecution.toString() : "Not Found";
+    public ResponseEntity<JobSummary> getJobSummary(@PathVariable Long executionId) {
+        JobExecution execution = jobRepository.getJobExecution(executionId);
+        if (execution == null) {
+            return ResponseEntity.status(404).body(new JobSummary(executionId, "NOT_FOUND", 0, 0, 0,
+                    "No job execution found for id " + executionId + "."));
+        }
+
+        // Full technical detail (incl. the exit-status stack trace) goes to the logs for
+        // developers/maintainers — never to the end user. Enable DEBUG to see it on a status check;
+        // an actual job failure is also error-logged by Spring Batch when it happens.
+        log.debug("Job execution {} full detail: {}", executionId, execution);
+
+        long rowsRead = 0, rowsWritten = 0, rowsSkipped = 0;
+        for (StepExecution step : execution.getStepExecutions()) {
+            rowsRead += step.getReadCount();
+            rowsWritten += step.getWriteCount();
+            rowsSkipped += step.getSkipCount();
+        }
+
+        String status = execution.getStatus().toString();
+        String message = switch (status) {
+            case "COMPLETED" -> String.format("Load completed: %d read, %d saved, %d skipped.",
+                    rowsRead, rowsWritten, rowsSkipped);
+            case "STARTING", "STARTED" -> "Load is still running…";
+            case "STOPPING", "STOPPED" -> "Load was stopped before finishing.";
+            case "FAILED", "ABANDONED" ->
+                    "Load failed and was rolled back — no data was saved. The error has been logged for the team.";
+            default -> "Load finished with status " + status + ".";
+        };
+
+        return ResponseEntity.ok(new JobSummary(executionId, status, rowsRead, rowsWritten, rowsSkipped, message));
     }
 }

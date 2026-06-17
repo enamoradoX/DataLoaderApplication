@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { ImportResponse } from './import.model';
+import { ImportResponse, JobSummary } from './import.model';
 
 @Injectable({ providedIn: 'root' })
 export class ImportService {
@@ -13,7 +13,7 @@ export class ImportService {
     return this.http.post<ImportResponse>(`/api/imports/${encodeURIComponent(type)}`, form);
   }
 
-  getSummary(executionId: number): Observable<string> {
-    return this.http.get(`/api/batch/summary/${executionId}`, { responseType: 'text' });
+  getSummary(executionId: number): Observable<JobSummary> {
+    return this.http.get<JobSummary>(`/api/batch/summary/${executionId}`);
   }
 }
