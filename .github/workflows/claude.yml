@@ -32,8 +32,11 @@ jobs:
 
       - name: Project Setup
         run: |
-          npm run setup
-          npm run dev:daemon
+          cd frontend
+          npm install
+          npm run start > logs.txt 2>&1 &
+          sleep 15
+          echo "Frontend server started"
 
       - name: Run Claude Code
         id: claude
