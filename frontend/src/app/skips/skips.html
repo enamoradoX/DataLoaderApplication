@@ -1,49 +1,121 @@
-<h1>Skipped Records — Load {{ loadId }}</h1>
+<div class="container">
+  <header class="page-header">
+    <h1>Skipped Records — Load {{ loadId }}</h1>
+  </header>
 
-@if (loading()) {
-  <p>Loading…</p>
-} @else if (loadError(); as err) {
-  <p class="err">{{ err }}</p>
-} @else if (views().length === 0) {
-  <p class="ok">No pending skipped records for this load.</p>
-} @else {
-  <p>Correct the values and reprocess. Saved rows show their new id; press Refresh to drop them from the list.</p>
+  @if (loading()) {
+    <div class="loader-container">
+      <div class="spinner"></div>
+      <p>Loading records…</p>
+    </div>
+  } @else if (loadError(); as err) {
+    <div class="alert alert-error">
+      <span class="icon">⚠</span>
+      <p>{{ err }}</p>
+    </div>
+  } @else if (views().length === 0) {
+    <div class="alert alert-success">
+      <span class="icon">✓</span>
+      <p>No pending skipped records for this load.</p>
+    </div>
+  } @else {
+    <div class="summary-bar">
+      <span class="count">{{ views().length }} record@if (views().length !== 1) {s} pending</span>
+    </div>
 
-  <form [formGroup]="formGroup" (ngSubmit)="submit()">
-    <div formArrayName="rows">
-      @for (group of rows.controls; track group.value.skipId; let i = $index) {
-        <div class="card" [formGroupName]="i">
-          <div class="meta">
-            <span class="badge">{{ views()[i].phase }}</span>
-            <span class="rid">record {{ views()[i].recordId }}</span>
-          </div>
-          <p class="err-text">{{ views()[i].errorMessage }}</p>
+    <p class="instructions">Correct the values and reprocess. Saved rows will be removed after refresh.</p>
 
-          <div class="fields">
-            <label>ID <input formControlName="id" autocomplete="off"></label>
-            <label>Name <input formControlName="name" autocomplete="off"></label>
-            <label>Email <input formControlName="email" autocomplete="off"></label>
-            <label>Department <input formControlName="department" autocomplete="off"></label>
-            <label>Role <input formControlName="role" autocomplete="off"></label>
-            <label>Salary <input formControlName="salary" autocomplete="off"></label>
-          </div>
-
-          @if (resultFor(group.value.skipId); as r) {
-            @if (r.success) {
-              <div class="result ok">Saved as employee id {{ r.savedId }}.</div>
-            } @else {
-              <div class="result err">
-                <ul>@for (e of r.errors; track e) { <li>{{ e }}</li> }</ul>
+    <form [formGroup]="formGroup" (ngSubmit)="submit()">
+      <div formArrayName="rows" class="cards-container">
+        @for (group of rows.controls; track group.value.skipId; let i = $index) {
+          <div class="card" [formGroupName]="i">
+            <div class="card-header">
+              <div class="meta">
+                <span class="badge badge-validation">{{ views()[i].phase }}</span>
+                <span class="card-number">{{ i + 1 }} of {{ rows.length }}</span>
+                <span class="record-id">ID {{ views()[i].recordId }}</span>
               </div>
-            }
-          }
-        </div>
-      }
-    </div>
+              @if (resultFor(group.value.skipId); as r) {
+                @if (r.success) {
+                  <div class="status-badge status-success">✓ Saved</div>
+                } @else {
+                  <div class="status-badge status-error">✕ Failed</div>
+                }
+              }
+            </div>
 
-    <div class="actions">
-      <button type="submit" [disabled]="submitting()">Reprocess All</button>
-      <button type="button" (click)="refresh()" [disabled]="submitting()">Refresh</button>
-    </div>
-  </form>
-}
+            <div class="error-section">
+              <p class="error-label">Error:</p>
+              <p class="error-message">{{ views()[i].errorMessage }}</p>
+            </div>
+
+            <fieldset class="fields-fieldset">
+              <legend>Employee Data</legend>
+              <div class="fields">
+                <div class="field">
+                  <label for="id-{{ i }}">ID</label>
+                  <input id="id-{{ i }}" formControlName="id" type="text" autocomplete="off" placeholder="e.g., 2005">
+                </div>
+                <div class="field">
+                  <label for="name-{{ i }}">Name</label>
+                  <input id="name-{{ i }}" formControlName="name" type="text" autocomplete="off" placeholder="Full name">
+                </div>
+                <div class="field">
+                  <label for="email-{{ i }}">Email</label>
+                  <input id="email-{{ i }}" formControlName="email" type="email" autocomplete="off" placeholder="user@example.com">
+                </div>
+                <div class="field">
+                  <label for="dept-{{ i }}">Department</label>
+                  <input id="dept-{{ i }}" formControlName="department" type="text" autocomplete="off" placeholder="e.g., Engineering">
+                </div>
+                <div class="field">
+                  <label for="role-{{ i }}">Role</label>
+                  <input id="role-{{ i }}" formControlName="role" type="text" autocomplete="off" placeholder="e.g., Developer">
+                </div>
+                <div class="field">
+                  <label for="salary-{{ i }}">Salary</label>
+                  <input id="salary-{{ i }}" formControlName="salary" type="text" autocomplete="off" placeholder="Numeric value">
+                </div>
+              </div>
+            </fieldset>
+
+            @if (resultFor(group.value.skipId); as r) {
+              @if (r.success) {
+                <div class="result result-success">
+                  <p><strong>✓ Saved</strong> as employee id <code>{{ r.savedId }}</code></p>
+                </div>
+              } @else {
+                <div class="result result-error">
+                  <p><strong>✕ Reprocessing failed:</strong></p>
+                  <ul>@for (e of r.errors; track e) { <li>{{ e }}</li> }</ul>
+                </div>
+              }
+            }
+          </div>
+        }
+      </div>
+
+      <div class="actions">
+        <button
+          type="submit"
+          class="btn btn-primary"
+          [disabled]="submitting()"
+          [attr.aria-busy]="submitting()">
+          @if (submitting()) {
+            <span class="spinner-small"></span>
+            Processing…
+          } @else {
+            Reprocess All
+          }
+        </button>
+        <button
+          type="button"
+          class="btn btn-secondary"
+          (click)="refresh()"
+          [disabled]="submitting()">
+          Refresh
+        </button>
+      </div>
+    </form>
+  }
+</div>

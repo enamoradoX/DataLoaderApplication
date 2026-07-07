@@ -4,7 +4,9 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import jakarta.validation.Validator;
 import org.mytestproject.dataloader.entities.Department;
+import org.mytestproject.dataloader.exceptions.DuplicateDepartmentException;
 import org.mytestproject.dataloader.listeners.DepartmentSkipListener;
+import org.mytestproject.dataloader.listeners.JobPerformanceListener;
 import org.mytestproject.dataloader.listeners.SkipDigestJobListener;
 import org.mytestproject.dataloader.models.DepartmentDto;
 import org.mytestproject.dataloader.repositories.DepartmentRepository;
@@ -39,14 +41,17 @@ public class DepartmentBatchConfig {
 
     private final DepartmentRepository departmentRepository;
     private final Validator validator;
+    private final JobPerformanceListener jobPerformanceListener;
     private final DepartmentSkipListener departmentSkipListener;
     private final SkipDigestJobListener skipDigestJobListener;
 
     public DepartmentBatchConfig(DepartmentRepository departmentRepository, Validator validator,
+                                 JobPerformanceListener jobPerformanceListener,
                                  DepartmentSkipListener departmentSkipListener,
                                  SkipDigestJobListener skipDigestJobListener) {
         this.departmentRepository = departmentRepository;
         this.validator = validator;
+        this.jobPerformanceListener = jobPerformanceListener;
         this.departmentSkipListener = departmentSkipListener;
         this.skipDigestJobListener = skipDigestJobListener;
     }
@@ -68,6 +73,7 @@ public class DepartmentBatchConfig {
                 .build();
     }
 
+    
     /**
      * Validates each name with the same shared Validator the employee loader uses (against
      * DepartmentDto), then maps to a Department. Blank lines are filtered (return null); rows that
@@ -90,12 +96,18 @@ public class DepartmentBatchConfig {
                 throw new ConstraintViolationException(violations);
             }
             String name = dto.name();
-            // Idempotent find-or-skip: drop names already loaded — repeated in this file (seenThisRun)
-            // or already in the DB (findByName). This is the real fix for the duplicate case: skipping
-            // on DataIntegrityViolation can't recover with JPA (the chunk tx goes rollback-only and the
-            // whole job fails), so we make sure a duplicate insert is never attempted.
-            if (!seenThisRun.add(name) || departmentRepository.findByName(name).isPresent()) {
-                return null;
+            // Idempotent find-or-skip: a name already loaded — repeated in this file (seenThisRun) or
+            // already in the DB (findByName) — is reported as a skip (with a reason) rather than
+            // inserted again. Throwing here is a PROCESS-phase skip (no DB write attempted), so it's
+            // counted in skipCount and recorded by DepartmentSkipListener, and it avoids the
+            // rollback-only failure that skip-on-DataIntegrityViolation would cause with JPA.
+            if (!seenThisRun.add(name)) {
+                throw new DuplicateDepartmentException(
+                        "Department '" + name + "' appears more than once in the file; not re-loaded.");
+            }
+            if (departmentRepository.findByName(name).isPresent()) {
+                throw new DuplicateDepartmentException(
+                        "Department '" + name + "' already exists; not re-loaded.");
             }
             return new Department(name);
         };
@@ -113,9 +125,10 @@ public class DepartmentBatchConfig {
                 .processor(departmentProcessor) // @StepScope proxy injected; dedupes per run
                 .writer(chunk -> departmentRepository.saveAll(chunk.getItems()))
                 .faultTolerant()
-                // Skip rows that fail validation (wrong-shaped data) and duplicate names (unique
-                // constraint) instead of failing the whole load; the listener records each skip.
+                // Skip (and record, with a reason) rows that fail validation or are duplicates,
+                // instead of failing the whole load. DataIntegrityViolation stays as a backstop.
                 .skip(ConstraintViolationException.class)
+                .skip(DuplicateDepartmentException.class)
                 .skip(DataIntegrityViolationException.class)
                 .skipLimit(1000)
                 .listener(departmentSkipListener)
@@ -126,6 +139,7 @@ public class DepartmentBatchConfig {
     public Job departmentLoaderJob(JobRepository jobRepository, Step departmentLoadingStep) {
         return new JobBuilder("departmentLoaderJob", jobRepository)
                 .start(departmentLoadingStep)
+                .listener(jobPerformanceListener)
                 .listener(skipDigestJobListener) // one digest email of any skipped department rows
                 .build();
     }
